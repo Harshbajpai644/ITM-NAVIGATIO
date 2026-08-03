@@ -1,19 +1,112 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
-import Map, { Source, Layer, Marker, NavigationControl } from '@vis.gl/react-maplibre'
+import Map, { Marker, NavigationControl } from '@vis.gl/react-maplibre'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { CAMPUS_CENTER } from '../data/campusData.js'
 import { shortestCampusRoute } from '../data/campusGraph.js'
 import { haversineM } from '../utils/dijkstra.js'
 
 const MAP_STYLE = 'https://tiles.openfreemap.org/styles/liberty'
+const ROUTE_SOURCE = 'campus-route'
+const ROUTE_LAYERS = ['route-casing', 'route-line', 'route-arrows']
 
 function fmtCoord(n) {
   return Number(n).toFixed(6)
 }
 
+/** Add midpoints so short routes still paint as a clear solid line. */
+function densifyLine(coords, stepM = 8) {
+  if (!coords || coords.length < 2) return coords || []
+  const out = [coords[0]]
+  for (let i = 0; i < coords.length - 1; i++) {
+    const a = { lng: coords[i][0], lat: coords[i][1] }
+    const b = { lng: coords[i + 1][0], lat: coords[i + 1][1] }
+    const seg = haversineM(a, b)
+    const steps = Math.max(1, Math.ceil(seg / stepM))
+    for (let s = 1; s <= steps; s++) {
+      const t = s / steps
+      out.push([a.lng + (b.lng - a.lng) * t, a.lat + (b.lat - a.lat) * t])
+    }
+  }
+  return out
+}
+
+function removeRoute(map) {
+  if (!map?.getStyle) return
+  try {
+    for (const id of ROUTE_LAYERS) {
+      if (map.getLayer(id)) map.removeLayer(id)
+    }
+    if (map.getSource(ROUTE_SOURCE)) map.removeSource(ROUTE_SOURCE)
+  } catch (_) {}
+}
+
+function paintRoute(map, coords) {
+  if (!map || !coords || coords.length < 2) return
+  const data = {
+    type: 'Feature',
+    properties: {},
+    geometry: { type: 'LineString', coordinates: densifyLine(coords, 6) },
+  }
+
+  const src = map.getSource(ROUTE_SOURCE)
+  if (src) {
+    src.setData(data)
+    return
+  }
+
+  map.addSource(ROUTE_SOURCE, { type: 'geojson', data })
+
+  map.addLayer({
+    id: 'route-casing',
+    type: 'line',
+    source: ROUTE_SOURCE,
+    layout: { 'line-join': 'round', 'line-cap': 'round' },
+    paint: {
+      'line-color': '#ffffff',
+      'line-width': 10,
+      'line-opacity': 0.95,
+    },
+  })
+
+  map.addLayer({
+    id: 'route-line',
+    type: 'line',
+    source: ROUTE_SOURCE,
+    layout: { 'line-join': 'round', 'line-cap': 'round' },
+    paint: {
+      'line-color': '#00C2A8',
+      'line-width': 6,
+      'line-opacity': 1,
+    },
+  })
+
+  map.addLayer({
+    id: 'route-arrows',
+    type: 'symbol',
+    source: ROUTE_SOURCE,
+    layout: {
+      'symbol-placement': 'line',
+      'symbol-spacing': 36,
+      'text-field': '▶',
+      'text-size': 15,
+      'text-keep-upright': false,
+      'text-rotation-alignment': 'map',
+      'text-pitch-alignment': 'viewport',
+      'text-allow-overlap': true,
+      'text-ignore-placement': true,
+    },
+    paint: {
+      'text-color': '#0F4C81',
+      'text-halo-color': '#ffffff',
+      'text-halo-width': 1.5,
+    },
+  })
+}
+
 export default function CampusMap({ userPos, block, onArrived }) {
   const mapRef = useRef(null)
   const lastRoutedPos = useRef(null)
+  const [mapReady, setMapReady] = useState(false)
 
   const [viewState, setViewState] = useState({
     longitude: block?.lng ?? CAMPUS_CENTER.lng,
@@ -43,25 +136,21 @@ export default function CampusMap({ userPos, block, onArrived }) {
     return []
   }, [routeCoords, userPos, block])
 
-  const routeGeoJSON = useMemo(
-    () => ({
-      type: 'Feature',
-      geometry: { type: 'LineString', coordinates: pathCoords },
-    }),
-    [pathCoords]
-  )
-
   const fitBoth = useCallback(() => {
     if (!mapRef.current || !userPos || !block) return
     try {
       const map = mapRef.current.getMap()
-      const bounds = [
-        [Math.min(userPos.lng, block.lng), Math.min(userPos.lat, block.lat)],
-        [Math.max(userPos.lng, block.lng), Math.max(userPos.lat, block.lat)],
-      ]
-      map.fitBounds(bounds, { padding: 90, duration: 600, maxZoom: 18.5, pitch: 0 })
+      const lngs = pathCoords.length > 1 ? pathCoords.map((c) => c[0]) : [userPos.lng, block.lng]
+      const lats = pathCoords.length > 1 ? pathCoords.map((c) => c[1]) : [userPos.lat, block.lat]
+      map.fitBounds(
+        [
+          [Math.min(...lngs), Math.min(...lats)],
+          [Math.max(...lngs), Math.max(...lats)],
+        ],
+        { padding: 100, duration: 600, maxZoom: 18.5, pitch: 0 }
+      )
     } catch (_) {}
-  }, [userPos, block])
+  }, [userPos, block, pathCoords])
 
   useEffect(() => {
     if (!userPos || !block) return
@@ -69,9 +158,9 @@ export default function CampusMap({ userPos, block, onArrived }) {
     if (d < 800) {
       setViewState((v) => ({
         ...v,
-        longitude: userPos.lng,
-        latitude: userPos.lat,
-        zoom: Math.max(v.zoom, 17.8),
+        longitude: (userPos.lng + block.lng) / 2,
+        latitude: (userPos.lat + block.lat) / 2,
+        zoom: Math.max(v.zoom, 17.6),
         pitch: 0,
       }))
     } else {
@@ -79,7 +168,7 @@ export default function CampusMap({ userPos, block, onArrived }) {
     }
   }, [userPos, block, liveDistanceM, fitBoth])
 
-  // Dijkstra shortest route on campus walk graph — recompute when you move ~12m
+  // Dijkstra shortest route
   useEffect(() => {
     if (!userPos || !block) return
     const moved = lastRoutedPos.current ? haversineM(lastRoutedPos.current, userPos) : Infinity
@@ -103,6 +192,29 @@ export default function CampusMap({ userPos, block, onArrived }) {
     }
   }, [userPos, block, liveDistanceM])
 
+  // Draw solid path on the MapLibre map (imperative = always visible)
+  useEffect(() => {
+    const map = mapRef.current?.getMap?.()
+    if (!map || !mapReady || pathCoords.length < 2) return
+
+    const draw = () => {
+      if (!map.isStyleLoaded()) return
+      try {
+        paintRoute(map, pathCoords)
+      } catch (_) {}
+    }
+
+    if (map.isStyleLoaded()) {
+      draw()
+      return undefined
+    }
+
+    map.once('load', draw)
+    return () => {
+      map.off('load', draw)
+    }
+  }, [pathCoords, mapReady])
+
   useEffect(() => {
     if (!onArrived || liveDistanceM == null) return
     if (liveDistanceM < 40) onArrived()
@@ -110,6 +222,19 @@ export default function CampusMap({ userPos, block, onArrived }) {
 
   const onMove = useCallback((evt) => {
     setViewState(evt.viewState)
+  }, [])
+
+  const onLoad = useCallback(() => {
+    setMapReady(true)
+    const map = mapRef.current?.getMap?.()
+    if (map && pathCoords.length > 1) paintRoute(map, pathCoords)
+  }, [pathCoords])
+
+  useEffect(() => {
+    return () => {
+      const map = mapRef.current?.getMap?.()
+      if (map) removeRoute(map)
+    }
   }, [])
 
   if (!userPos || !block) return null
@@ -124,60 +249,13 @@ export default function CampusMap({ userPos, block, onArrived }) {
           ref={mapRef}
           {...viewState}
           onMove={onMove}
+          onLoad={onLoad}
           mapStyle={MAP_STYLE}
           style={{ width: '100%', height: '100%' }}
           maxPitch={60}
           attributionControl
         >
           <NavigationControl position="top-right" />
-
-          {pathCoords.length > 1 && (
-            <>
-              <Source id="route" type="geojson" data={routeGeoJSON}>
-                <Layer
-                  id="route-glow"
-                  type="line"
-                  layout={{ 'line-join': 'round', 'line-cap': 'round' }}
-                  paint={{
-                    'line-color': '#5eead4',
-                    'line-width': 10,
-                    'line-opacity': 0.35,
-                    'line-blur': 2,
-                  }}
-                />
-                <Layer
-                  id="route-line"
-                  type="line"
-                  layout={{ 'line-join': 'round', 'line-cap': 'round' }}
-                  paint={{
-                    'line-color': '#00C2A8',
-                    'line-width': 5,
-                    'line-opacity': 0.95,
-                  }}
-                />
-                <Layer
-                  id="route-arrows"
-                  type="symbol"
-                  layout={{
-                    'symbol-placement': 'line',
-                    'symbol-spacing': 42,
-                    'text-field': '▶',
-                    'text-size': 16,
-                    'text-keep-upright': false,
-                    'text-rotation-alignment': 'map',
-                    'text-pitch-alignment': 'viewport',
-                    'text-allow-overlap': true,
-                    'text-ignore-placement': true,
-                  }}
-                  paint={{
-                    'text-color': '#0F4C81',
-                    'text-halo-color': '#ffffff',
-                    'text-halo-width': 1.5,
-                  }}
-                />
-              </Source>
-            </>
-          )}
 
           <Marker longitude={block.lng} latitude={block.lat} anchor="bottom">
             <div className="coord-pin dest-pin">
