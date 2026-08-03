@@ -313,6 +313,98 @@ input.text-input:focus, select.select-input:focus, textarea.text-input:focus{ ou
   transform:translateY(-4px);
   box-shadow:0 2px 8px rgba(15,76,129,0.12);
 }
+.coord-pin{
+  min-width:120px;
+  max-width:200px;
+  border-radius:12px;
+  padding:8px 10px;
+  pointer-events:none;
+  box-shadow:0 6px 18px rgba(15,76,129,0.22);
+  transform:translateY(-8px);
+}
+.coord-pin-title{
+  font-family:'Space Grotesk', sans-serif;
+  font-size:12px;
+  font-weight:700;
+  margin-bottom:3px;
+}
+.coord-pin-xy{
+  font-family:'IBM Plex Mono', monospace;
+  font-size:10px;
+  opacity:0.9;
+  word-break:break-all;
+}
+.dest-pin{
+  background:#00C2A8;
+  color:#04231d;
+  border:1px solid rgba(255,255,255,0.55);
+}
+.you-pin{
+  background:#0F4C81;
+  color:#fff;
+  border:1px solid rgba(255,255,255,0.4);
+}
+.map-float-single{
+  position:absolute;
+  z-index:2;
+  top:52px;
+  right:12px;
+}
+.map-coord-panel{
+  position:absolute;
+  z-index:2;
+  left:12px;
+  bottom:16px;
+  right:12px;
+  max-width:420px;
+  margin:0 auto;
+  background:rgba(255,255,255,0.95);
+  border:1px solid var(--line);
+  border-radius:14px;
+  box-shadow:var(--shadow);
+  padding:12px 14px;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+.map-coord-row{
+  display:flex;
+  justify-content:space-between;
+  gap:12px;
+  align-items:flex-start;
+}
+.map-coord-label{
+  font-family:'IBM Plex Mono', monospace;
+  font-size:10px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  color:var(--slate);
+  flex-shrink:0;
+  padding-top:2px;
+}
+.map-coord-value{
+  font-size:13px;
+  text-align:right;
+  color:var(--ink);
+  line-height:1.45;
+}
+.map-coord-value code{
+  font-family:'IBM Plex Mono', monospace;
+  font-size:11px;
+  color:var(--primary);
+}
+.map-coord-dist .map-coord-value strong{
+  font-family:'Space Grotesk', sans-serif;
+  font-size:20px;
+  color:var(--accent);
+}
+.map-coord-mins{
+  font-size:12px;
+  color:var(--slate);
+}
+[data-theme="dark"] .map-coord-panel{
+  background:rgba(20,28,44,0.95);
+}
 [data-theme="dark"] .map-overlay-stats,
 [data-theme="dark"] .map-3d-badge,
 [data-theme="dark"] .map-error-float,

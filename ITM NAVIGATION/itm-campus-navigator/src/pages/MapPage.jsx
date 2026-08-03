@@ -17,12 +17,17 @@ export default function MapPage() {
   useEffect(() => {
     if (locStatus !== 'granted') return
     const watchId = navigator.geolocation.watchPosition(
-      (pos) => setUserPos({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      (pos) =>
+        setUserPos({
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          accuracy: pos.coords.accuracy,
+        }),
       () => {
         setLocStatus('error')
-        setErrorMsg('Error while checking your location. Check if GPS is on.')
+        setErrorMsg('Location error. GPS on hai?')
       },
-      { enableHighAccuracy: true, maximumAge: 4000, timeout: 15000 }
+      { enableHighAccuracy: true, maximumAge: 2000, timeout: 15000 }
     )
     return () => navigator.geolocation.clearWatch(watchId)
   }, [locStatus])
@@ -30,20 +35,22 @@ export default function MapPage() {
   const enableLocation = () => {
     if (!('geolocation' in navigator)) {
       setLocStatus('error')
-      setErrorMsg('This browser does not support location.')
+      setErrorMsg('Browser location support nahi karta.')
       return
     }
     setLocStatus('loading')
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        setUserPos({ lat: pos.coords.latitude, lng: pos.coords.longitude })
+        setUserPos({
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          accuracy: pos.coords.accuracy,
+        })
         setLocStatus('granted')
       },
       () => {
         setLocStatus('error')
-        setErrorMsg(
-          "Location access isn't enabled. Allow location from site settings. Needs https:// or localhost."
-        )
+        setErrorMsg('Location allow karo (https / localhost).')
       },
       { enableHighAccuracy: true, timeout: 12000 }
     )
@@ -55,8 +62,8 @@ export default function MapPage() {
     return (
       <div className="page page-narrow">
         <div className="eyebrow">Navigate</div>
-        <h1 className="page-title">Choose your destination</h1>
-        <p className="page-sub">Where you want to go?</p>
+        <h1 className="page-title">Building search</h1>
+        <p className="page-sub">Building choose karo — uske coordinates + aapki live GPS dikhengi.</p>
         <div className="field">
           <select
             className="select-input"
@@ -64,11 +71,11 @@ export default function MapPage() {
             defaultValue=""
           >
             <option value="" disabled>
-              — Choose your destination —
+              — Building choose karo —
             </option>
             {BLOCKS.map((b) => (
               <option key={b.id} value={b.id}>
-                {b.name}
+                {b.name} ({b.lat.toFixed(5)}, {b.lng.toFixed(5)})
               </option>
             ))}
           </select>
@@ -81,10 +88,14 @@ export default function MapPage() {
     return (
       <div className="page page-narrow">
         <div className="eyebrow">{activeBlock?.name}</div>
-        <h1 className="page-title">Turn your location on</h1>
+        <h1 className="page-title">Turn on live location</h1>
         <p className="page-sub">
-          This helps us create the correct route from your current location to {activeBlock?.name}.
-          We do not store your location.
+          Destination coordinates:{' '}
+          <code>
+            {activeBlock?.lat.toFixed(6)}, {activeBlock?.lng.toFixed(6)}
+          </code>
+          <br />
+          Ab apni live GPS on karo — dono match karke distance milega.
         </p>
         <button className="btn btn-primary" onClick={enableLocation} disabled={locStatus === 'loading'}>
           {locStatus === 'loading' ? 'Detecting...' : 'Turn On Your Location'}
@@ -104,7 +115,11 @@ export default function MapPage() {
           </h1>
         </div>
         {arrived && (
-          <Link className="btn btn-accent" to={`/building/${activeBlock.id}`} style={{ width: 'auto', textDecoration: 'none' }}>
+          <Link
+            className="btn btn-accent"
+            to={`/building/${activeBlock.id}`}
+            style={{ width: 'auto', textDecoration: 'none' }}
+          >
             Building details →
           </Link>
         )}
