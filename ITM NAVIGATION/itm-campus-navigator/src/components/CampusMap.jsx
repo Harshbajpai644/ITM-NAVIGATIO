@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import Map, { Source, Layer, Marker, NavigationControl } from '@vis.gl/react-maplibre'
 import 'maplibre-gl/dist/maplibre-gl.css'
-import { BLOCKS, CAMPUS_CENTER } from '../data/campusData.js'
+import { BLOCKS, CAMPUS_CENTER, PATH_POINTS } from '../data/campusData.js'
 import { createCampusBuildingsLayer } from '../utils/threeBuildingsLayer.js'
 import {
   bearingDeg,
@@ -328,6 +328,12 @@ export default function CampusMap({ userPos, block, onArrived }) {
               </Marker>
             )
           })}
+
+          {PATH_POINTS.map((p) => (
+            <Marker key={p.id} longitude={p.lng} latitude={p.lat} anchor="bottom">
+              <div className="campus-path-label">{p.name}</div>
+            </Marker>
+          ))}
 
           {nearCampus && (
             <Marker longitude={userPos.lng} latitude={userPos.lat} anchor="bottom">

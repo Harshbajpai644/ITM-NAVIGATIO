@@ -1,3 +1,5 @@
+import { CAMPUS_SPINE } from '../data/campusData.js'
+
 /** Route helpers for path-follow camera */
 
 export function bearingDeg(from, to) {
@@ -12,7 +14,6 @@ export function bearingDeg(from, to) {
 }
 
 export function nearestRouteIndex(coords, pos) {
-  // coords: [lng, lat][]
   let best = 0
   let bestD = Infinity
   for (let i = 0; i < coords.length; i++) {
@@ -31,13 +32,9 @@ export function lookAheadPoint(coords, index, steps = 4) {
   return { lng: coords[i][0], lat: coords[i][1] }
 }
 
-/** Build a short campus walk path when user is far (preview). */
-export function campusPreviewPath(center, dest) {
-  return [
-    [center.lng - 0.0012, center.lat - 0.0008],
-    [center.lng - 0.0004, center.lat - 0.0003],
-    [center.lng, center.lat],
-    [dest.lng - 0.0003, dest.lat - 0.0002],
-    [dest.lng, dest.lat],
-  ]
+/** Build campus walk path when user is far (uses real spine pins). */
+export function campusPreviewPath(_center, dest) {
+  const spine = CAMPUS_SPINE.map(([lng, lat]) => [lng, lat])
+  if (!dest) return spine
+  return [...spine, [dest.lng, dest.lat]]
 }

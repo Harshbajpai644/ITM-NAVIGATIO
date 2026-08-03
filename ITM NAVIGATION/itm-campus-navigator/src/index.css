@@ -294,6 +294,25 @@ input.text-input:focus, select.select-input:focus, textarea.text-input:focus{ ou
   border-color:rgba(255,255,255,0.55); box-shadow:0 8px 22px rgba(0,194,168,0.4);
 }
 .campus-bldg-label.is-dest .campus-bldg-label-dot{ background:#fbbf24; }
+.campus-path-label{
+  font-family:'IBM Plex Mono', monospace;
+  font-size:9px;
+  font-weight:600;
+  letter-spacing:0.04em;
+  text-transform:uppercase;
+  color:#0b3760;
+  background:rgba(255,255,255,0.9);
+  border:1px solid rgba(15,76,129,0.25);
+  border-radius:6px;
+  padding:3px 6px;
+  white-space:nowrap;
+  max-width:140px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  pointer-events:none;
+  transform:translateY(-4px);
+  box-shadow:0 2px 8px rgba(15,76,129,0.12);
+}
 [data-theme="dark"] .map-overlay-stats,
 [data-theme="dark"] .map-3d-badge,
 [data-theme="dark"] .map-error-float,
