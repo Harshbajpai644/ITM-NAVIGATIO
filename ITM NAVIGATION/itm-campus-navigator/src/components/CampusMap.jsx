@@ -20,6 +20,33 @@ function fmtCoord(n) {
   return Number(n).toFixed(6)
 }
 
+/** Evenly spaced dots along a [lng,lat][] line for “dot dot” path. */
+function buildDotFeatures(coords, spacingM = 12) {
+  if (!coords || coords.length < 2) return []
+  const features = []
+  let carry = 0
+  for (let i = 0; i < coords.length - 1; i++) {
+    const a = { lng: coords[i][0], lat: coords[i][1] }
+    const b = { lng: coords[i + 1][0], lat: coords[i + 1][1] }
+    const seg = haversine(a, b)
+    if (seg < 0.01) continue
+    let d = carry
+    while (d <= seg) {
+      const t = d / seg
+      const lng = a.lng + (b.lng - a.lng) * t
+      const lat = a.lat + (b.lat - a.lat) * t
+      features.push({
+        type: 'Feature',
+        properties: {},
+        geometry: { type: 'Point', coordinates: [lng, lat] },
+      })
+      d += spacingM
+    }
+    carry = d - seg
+  }
+  return features
+}
+
 export default function CampusMap({ userPos, block, onArrived }) {
   const mapRef = useRef(null)
   const lastRoutedPos = useRef(null)
@@ -34,19 +61,38 @@ export default function CampusMap({ userPos, block, onArrived }) {
   const [routeCoords, setRouteCoords] = useState([])
   const [routeDistanceM, setRouteDistanceM] = useState(null)
   const [routeDurationS, setRouteDurationS] = useState(null)
-  const [routeError, setRouteError] = useState(false)
 
   const liveDistanceM = useMemo(() => {
     if (!userPos || !block) return null
     return haversine(userPos, block)
   }, [userPos, block])
 
+  // Always have at least a straight path between you → destination
+  const pathCoords = useMemo(() => {
+    if (routeCoords.length > 1) return routeCoords
+    if (userPos && block) {
+      return [
+        [userPos.lng, userPos.lat],
+        [block.lng, block.lat],
+      ]
+    }
+    return []
+  }, [routeCoords, userPos, block])
+
   const routeGeoJSON = useMemo(
     () => ({
       type: 'Feature',
-      geometry: { type: 'LineString', coordinates: routeCoords },
+      geometry: { type: 'LineString', coordinates: pathCoords },
     }),
-    [routeCoords]
+    [pathCoords]
+  )
+
+  const dotsGeoJSON = useMemo(
+    () => ({
+      type: 'FeatureCollection',
+      features: buildDotFeatures(pathCoords, 14),
+    }),
+    [pathCoords]
   )
 
   const fitBoth = useCallback(() => {
@@ -57,11 +103,10 @@ export default function CampusMap({ userPos, block, onArrived }) {
         [Math.min(userPos.lng, block.lng), Math.min(userPos.lat, block.lat)],
         [Math.max(userPos.lng, block.lng), Math.max(userPos.lat, block.lat)],
       ]
-      map.fitBounds(bounds, { padding: 80, duration: 600, maxZoom: 18, pitch: 0 })
+      map.fitBounds(bounds, { padding: 90, duration: 600, maxZoom: 18.5, pitch: 0 })
     } catch (_) {}
   }, [userPos, block])
 
-  // Keep camera near user when close; otherwise show both pins
   useEffect(() => {
     if (!userPos || !block) return
     const d = liveDistanceM ?? Infinity
@@ -78,17 +123,21 @@ export default function CampusMap({ userPos, block, onArrived }) {
     }
   }, [userPos, block, liveDistanceM, fitBoth])
 
-  // Walking route (optional line) — distance always from live GPS haversine
   useEffect(() => {
     if (!userPos || !block) return
     const moved = lastRoutedPos.current ? haversine(lastRoutedPos.current, userPos) : Infinity
-    if (moved < 25 && lastRoutedPos.current) return
+    if (moved < 20 && lastRoutedPos.current) return
 
     let cancelled = false
-    setRouteError(false)
     const url =
       `https://router.project-osrm.org/route/v1/foot/` +
       `${userPos.lng},${userPos.lat};${block.lng},${block.lat}?overview=full&geometries=geojson`
+
+    // Instant fallback so path always visible
+    setRouteCoords([
+      [userPos.lng, userPos.lat],
+      [block.lng, block.lat],
+    ])
 
     fetch(url)
       .then((r) => r.json())
@@ -101,22 +150,12 @@ export default function CampusMap({ userPos, block, onArrived }) {
           setRouteDurationS(route.duration)
           lastRoutedPos.current = userPos
         } else {
-          setRouteError(true)
-          setRouteCoords([
-            [userPos.lng, userPos.lat],
-            [block.lng, block.lat],
-          ])
           setRouteDistanceM(null)
           setRouteDurationS(null)
         }
       })
       .catch(() => {
         if (cancelled) return
-        setRouteError(true)
-        setRouteCoords([
-          [userPos.lng, userPos.lat],
-          [block.lng, block.lat],
-        ])
         setRouteDistanceM(null)
         setRouteDurationS(null)
       })
@@ -157,23 +196,72 @@ export default function CampusMap({ userPos, block, onArrived }) {
         >
           <NavigationControl position="top-right" />
 
-          {routeCoords.length > 1 && (
-            <Source id="route" type="geojson" data={routeGeoJSON}>
-              <Layer
-                id="route-line"
-                type="line"
-                layout={{ 'line-join': 'round', 'line-cap': 'round' }}
-                paint={{
-                  'line-color': '#00C2A8',
-                  'line-width': 5,
-                  'line-opacity': 0.9,
-                  'line-dasharray': routeError ? [1.5, 1.2] : undefined,
-                }}
-              />
-            </Source>
+          {pathCoords.length > 1 && (
+            <>
+              <Source id="route" type="geojson" data={routeGeoJSON}>
+                {/* Soft under-glow */}
+                <Layer
+                  id="route-glow"
+                  type="line"
+                  layout={{ 'line-join': 'round', 'line-cap': 'round' }}
+                  paint={{
+                    'line-color': '#5eead4',
+                    'line-width': 10,
+                    'line-opacity': 0.35,
+                    'line-blur': 2,
+                  }}
+                />
+                {/* Dotted path */}
+                <Layer
+                  id="route-dots-line"
+                  type="line"
+                  layout={{ 'line-join': 'round', 'line-cap': 'round' }}
+                  paint={{
+                    'line-color': '#00C2A8',
+                    'line-width': 4,
+                    'line-opacity': 0.95,
+                    'line-dasharray': [0.4, 1.6],
+                  }}
+                />
+                {/* Direction arrows along the path */}
+                <Layer
+                  id="route-arrows"
+                  type="symbol"
+                  layout={{
+                    'symbol-placement': 'line',
+                    'symbol-spacing': 42,
+                    'text-field': '▶',
+                    'text-size': 16,
+                    'text-keep-upright': false,
+                    'text-rotation-alignment': 'map',
+                    'text-pitch-alignment': 'viewport',
+                    'text-allow-overlap': true,
+                    'text-ignore-placement': true,
+                  }}
+                  paint={{
+                    'text-color': '#0F4C81',
+                    'text-halo-color': '#ffffff',
+                    'text-halo-width': 1.5,
+                  }}
+                />
+              </Source>
+
+              {/* Extra circle dots for clearer “dot dot” look */}
+              <Source id="route-dots" type="geojson" data={dotsGeoJSON}>
+                <Layer
+                  id="route-dot-circles"
+                  type="circle"
+                  paint={{
+                    'circle-radius': 3.5,
+                    'circle-color': '#00C2A8',
+                    'circle-stroke-width': 1.5,
+                    'circle-stroke-color': '#ffffff',
+                  }}
+                />
+              </Source>
+            </>
           )}
 
-          {/* Destination pin = building coordinates */}
           <Marker longitude={block.lng} latitude={block.lat} anchor="bottom">
             <div className="coord-pin dest-pin">
               <div className="coord-pin-title">{block.name}</div>
@@ -183,7 +271,6 @@ export default function CampusMap({ userPos, block, onArrived }) {
             </div>
           </Marker>
 
-          {/* Live GPS pin */}
           <Marker longitude={userPos.lng} latitude={userPos.lat} anchor="bottom">
             <div className="coord-pin you-pin">
               <div className="coord-pin-title">You (live)</div>
@@ -195,7 +282,7 @@ export default function CampusMap({ userPos, block, onArrived }) {
         </Map>
       </div>
 
-      <div className="map-3d-badge">Live GPS · Coordinate match · Distance updates</div>
+      <div className="map-3d-badge">Dotted path · Arrows · Live distance</div>
 
       <button type="button" className="map-float-btn map-float-single" onClick={fitBoth}>
         Fit both pins
