@@ -2,19 +2,10 @@ import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import Map, { Source, Layer, Marker, NavigationControl } from '@vis.gl/react-maplibre'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { CAMPUS_CENTER } from '../data/campusData.js'
+import { shortestCampusRoute } from '../data/campusGraph.js'
+import { haversineM } from '../utils/dijkstra.js'
 
 const MAP_STYLE = 'https://tiles.openfreemap.org/styles/liberty'
-
-function haversine(a, b) {
-  const R = 6371000
-  const toRad = (d) => (d * Math.PI) / 180
-  const dLat = toRad(b.lat - a.lat)
-  const dLng = toRad(b.lng - a.lng)
-  const x =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2
-  return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x))
-}
 
 function fmtCoord(n) {
   return Number(n).toFixed(6)
@@ -28,7 +19,7 @@ function buildDotFeatures(coords, spacingM = 12) {
   for (let i = 0; i < coords.length - 1; i++) {
     const a = { lng: coords[i][0], lat: coords[i][1] }
     const b = { lng: coords[i + 1][0], lat: coords[i + 1][1] }
-    const seg = haversine(a, b)
+    const seg = haversineM(a, b)
     if (seg < 0.01) continue
     let d = carry
     while (d <= seg) {
@@ -60,14 +51,14 @@ export default function CampusMap({ userPos, block, onArrived }) {
   })
   const [routeCoords, setRouteCoords] = useState([])
   const [routeDistanceM, setRouteDistanceM] = useState(null)
-  const [routeDurationS, setRouteDurationS] = useState(null)
+  const [routeMinutes, setRouteMinutes] = useState(null)
+  const [viaNodes, setViaNodes] = useState(0)
 
   const liveDistanceM = useMemo(() => {
     if (!userPos || !block) return null
-    return haversine(userPos, block)
+    return haversineM(userPos, block)
   }, [userPos, block])
 
-  // Always have at least a straight path between you → destination
   const pathCoords = useMemo(() => {
     if (routeCoords.length > 1) return routeCoords
     if (userPos && block) {
@@ -123,47 +114,29 @@ export default function CampusMap({ userPos, block, onArrived }) {
     }
   }, [userPos, block, liveDistanceM, fitBoth])
 
+  // Dijkstra shortest route on campus walk graph — recompute when you move ~12m
   useEffect(() => {
     if (!userPos || !block) return
-    const moved = lastRoutedPos.current ? haversine(lastRoutedPos.current, userPos) : Infinity
-    if (moved < 20 && lastRoutedPos.current) return
+    const moved = lastRoutedPos.current ? haversineM(lastRoutedPos.current, userPos) : Infinity
+    if (moved < 12 && lastRoutedPos.current) return
 
-    let cancelled = false
-    const url =
-      `https://router.project-osrm.org/route/v1/foot/` +
-      `${userPos.lng},${userPos.lat};${block.lng},${block.lat}?overview=full&geometries=geojson`
-
-    // Instant fallback so path always visible
-    setRouteCoords([
-      [userPos.lng, userPos.lat],
-      [block.lng, block.lat],
-    ])
-
-    fetch(url)
-      .then((r) => r.json())
-      .then((data) => {
-        if (cancelled) return
-        if (data.routes?.[0]) {
-          const route = data.routes[0]
-          setRouteCoords(route.geometry.coordinates)
-          setRouteDistanceM(route.distance)
-          setRouteDurationS(route.duration)
-          lastRoutedPos.current = userPos
-        } else {
-          setRouteDistanceM(null)
-          setRouteDurationS(null)
-        }
-      })
-      .catch(() => {
-        if (cancelled) return
-        setRouteDistanceM(null)
-        setRouteDurationS(null)
-      })
-
-    return () => {
-      cancelled = true
+    const route = shortestCampusRoute(userPos, block)
+    if (route?.coords?.length > 1) {
+      setRouteCoords(route.coords)
+      setRouteDistanceM(route.distanceM)
+      setRouteMinutes(route.minutes)
+      setViaNodes(Math.max(0, (route.nodeIds?.length || 0) - 2))
+      lastRoutedPos.current = userPos
+    } else {
+      setRouteCoords([
+        [userPos.lng, userPos.lat],
+        [block.lng, block.lat],
+      ])
+      setRouteDistanceM(liveDistanceM)
+      setRouteMinutes(Math.max(1, Math.round((liveDistanceM || 0) / 80)))
+      setViaNodes(0)
     }
-  }, [userPos, block])
+  }, [userPos, block, liveDistanceM])
 
   useEffect(() => {
     if (!onArrived || liveDistanceM == null) return
@@ -176,11 +149,8 @@ export default function CampusMap({ userPos, block, onArrived }) {
 
   if (!userPos || !block) return null
 
-  const shownDistance = Math.round(liveDistanceM ?? routeDistanceM ?? 0)
-  const shownMinutes =
-    routeDurationS != null
-      ? Math.max(1, Math.round(routeDurationS / 60))
-      : Math.max(1, Math.round(shownDistance / 80))
+  const shownDistance = Math.round(routeDistanceM ?? liveDistanceM ?? 0)
+  const shownMinutes = routeMinutes ?? Math.max(1, Math.round(shownDistance / 80))
 
   return (
     <div className="map-card map-card-full" style={{ position: 'relative' }}>
@@ -199,7 +169,6 @@ export default function CampusMap({ userPos, block, onArrived }) {
           {pathCoords.length > 1 && (
             <>
               <Source id="route" type="geojson" data={routeGeoJSON}>
-                {/* Soft under-glow */}
                 <Layer
                   id="route-glow"
                   type="line"
@@ -211,7 +180,6 @@ export default function CampusMap({ userPos, block, onArrived }) {
                     'line-blur': 2,
                   }}
                 />
-                {/* Dotted path */}
                 <Layer
                   id="route-dots-line"
                   type="line"
@@ -223,7 +191,6 @@ export default function CampusMap({ userPos, block, onArrived }) {
                     'line-dasharray': [0.4, 1.6],
                   }}
                 />
-                {/* Direction arrows along the path */}
                 <Layer
                   id="route-arrows"
                   type="symbol"
@@ -246,7 +213,6 @@ export default function CampusMap({ userPos, block, onArrived }) {
                 />
               </Source>
 
-              {/* Extra circle dots for clearer “dot dot” look */}
               <Source id="route-dots" type="geojson" data={dotsGeoJSON}>
                 <Layer
                   id="route-dot-circles"
@@ -294,7 +260,7 @@ export default function CampusMap({ userPos, block, onArrived }) {
         </Map>
       </div>
 
-      <div className="map-3d-badge">You avatar · Dotted path · Arrows</div>
+      <div className="map-3d-badge">Dijkstra shortest · Dotted path · Arrows</div>
 
       <button type="button" className="map-float-btn map-float-single" onClick={fitBoth}>
         Fit both pins
@@ -320,10 +286,14 @@ export default function CampusMap({ userPos, block, onArrived }) {
           </span>
         </div>
         <div className="map-coord-row map-coord-dist">
-          <span className="map-coord-label">Distance now</span>
+          <span className="map-coord-label">Shortest route</span>
           <span className="map-coord-value">
             <strong>{shownDistance} m</strong>
-            <span className="map-coord-mins"> · ~{shownMinutes} min walk</span>
+            <span className="map-coord-mins">
+              {' '}
+              · ~{shownMinutes} min
+              {viaNodes > 0 ? ` · via ${viaNodes} hubs` : ''}
+            </span>
           </span>
         </div>
       </div>
