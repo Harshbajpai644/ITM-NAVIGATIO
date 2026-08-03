@@ -373,7 +373,7 @@ input.text-input:focus, select.select-input:focus, textarea.text-input:focus{ ou
   z-index:1;
   width:28px;
   height:52px;
-  animation:youBob 1.35s ease-in-out infinite;
+  animation:youAvatarBob 1.35s ease-in-out infinite;
   filter:drop-shadow(0 4px 8px rgba(15,76,129,0.35));
 }
 .you-avatar-head{
@@ -464,7 +464,7 @@ input.text-input:focus, select.select-input:focus, textarea.text-input:focus{ ou
   70%{ transform:scale(1.55); opacity:0; }
   100%{ transform:scale(1.55); opacity:0; }
 }
-@keyframes youBob{
+@keyframes youAvatarBob{
   0%,100%{ transform:translateY(0); }
   50%{ transform:translateY(-4px); }
 }
