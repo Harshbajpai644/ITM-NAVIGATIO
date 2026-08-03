@@ -11,33 +11,6 @@ function fmtCoord(n) {
   return Number(n).toFixed(6)
 }
 
-/** Evenly spaced dots along a [lng,lat][] line for “dot dot” path. */
-function buildDotFeatures(coords, spacingM = 12) {
-  if (!coords || coords.length < 2) return []
-  const features = []
-  let carry = 0
-  for (let i = 0; i < coords.length - 1; i++) {
-    const a = { lng: coords[i][0], lat: coords[i][1] }
-    const b = { lng: coords[i + 1][0], lat: coords[i + 1][1] }
-    const seg = haversineM(a, b)
-    if (seg < 0.01) continue
-    let d = carry
-    while (d <= seg) {
-      const t = d / seg
-      const lng = a.lng + (b.lng - a.lng) * t
-      const lat = a.lat + (b.lat - a.lat) * t
-      features.push({
-        type: 'Feature',
-        properties: {},
-        geometry: { type: 'Point', coordinates: [lng, lat] },
-      })
-      d += spacingM
-    }
-    carry = d - seg
-  }
-  return features
-}
-
 export default function CampusMap({ userPos, block, onArrived }) {
   const mapRef = useRef(null)
   const lastRoutedPos = useRef(null)
@@ -74,14 +47,6 @@ export default function CampusMap({ userPos, block, onArrived }) {
     () => ({
       type: 'Feature',
       geometry: { type: 'LineString', coordinates: pathCoords },
-    }),
-    [pathCoords]
-  )
-
-  const dotsGeoJSON = useMemo(
-    () => ({
-      type: 'FeatureCollection',
-      features: buildDotFeatures(pathCoords, 14),
     }),
     [pathCoords]
   )
@@ -181,14 +146,13 @@ export default function CampusMap({ userPos, block, onArrived }) {
                   }}
                 />
                 <Layer
-                  id="route-dots-line"
+                  id="route-line"
                   type="line"
                   layout={{ 'line-join': 'round', 'line-cap': 'round' }}
                   paint={{
                     'line-color': '#00C2A8',
-                    'line-width': 4,
+                    'line-width': 5,
                     'line-opacity': 0.95,
-                    'line-dasharray': [0.4, 1.6],
                   }}
                 />
                 <Layer
@@ -209,19 +173,6 @@ export default function CampusMap({ userPos, block, onArrived }) {
                     'text-color': '#0F4C81',
                     'text-halo-color': '#ffffff',
                     'text-halo-width': 1.5,
-                  }}
-                />
-              </Source>
-
-              <Source id="route-dots" type="geojson" data={dotsGeoJSON}>
-                <Layer
-                  id="route-dot-circles"
-                  type="circle"
-                  paint={{
-                    'circle-radius': 3.5,
-                    'circle-color': '#00C2A8',
-                    'circle-stroke-width': 1.5,
-                    'circle-stroke-color': '#ffffff',
                   }}
                 />
               </Source>
@@ -260,7 +211,7 @@ export default function CampusMap({ userPos, block, onArrived }) {
         </Map>
       </div>
 
-      <div className="map-3d-badge">Dijkstra shortest · Dotted path · Arrows</div>
+      <div className="map-3d-badge">Dijkstra shortest · Solid path · Arrows</div>
 
       <button type="button" className="map-float-btn map-float-single" onClick={fitBoth}>
         Fit both pins
