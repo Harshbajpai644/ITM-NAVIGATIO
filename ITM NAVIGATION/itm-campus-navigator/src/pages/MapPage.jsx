@@ -6,23 +6,28 @@ import { BLOCKS } from '../data/campusData.js'
 export default function MapPage() {
   const [params, setParams] = useSearchParams()
   const destId = params.get('dest') || ''
-  const [locStatus, setLocStatus] = useState('idle') // idle | loading | granted | error
+  const [locStatus, setLocStatus] = useState('idle')
   const [errorMsg, setErrorMsg] = useState('')
   const [userPos, setUserPos] = useState(null)
   const [arrived, setArrived] = useState(false)
 
   const activeBlock = BLOCKS.find((b) => b.id === destId)
+  const navigating = Boolean(destId && locStatus === 'granted' && userPos)
 
-  // Live GPS using watchPosition so the route updates as the visitor walks
   useEffect(() => {
     if (locStatus !== 'granted') return
     const watchId = navigator.geolocation.watchPosition(
-      (pos) => setUserPos({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      (pos) =>
+        setUserPos({
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          accuracy: pos.coords.accuracy,
+        }),
       () => {
         setLocStatus('error')
-        setErrorMsg('Error while checking your location. check weather your GPS is on or not.')
+        setErrorMsg('Location error. GPS on hai?')
       },
-      { enableHighAccuracy: true, maximumAge: 4000, timeout: 15000 }
+      { enableHighAccuracy: true, maximumAge: 2000, timeout: 15000 }
     )
     return () => navigator.geolocation.clearWatch(watchId)
   }, [locStatus])
@@ -30,20 +35,22 @@ export default function MapPage() {
   const enableLocation = () => {
     if (!('geolocation' in navigator)) {
       setLocStatus('error')
-      setErrorMsg('This browser not support the location.')
+      setErrorMsg('Browser location support nahi karta.')
       return
     }
     setLocStatus('loading')
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        setUserPos({ lat: pos.coords.latitude, lng: pos.coords.longitude })
+        setUserPos({
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          accuracy: pos.coords.accuracy,
+        })
         setLocStatus('granted')
       },
       () => {
         setLocStatus('error')
-        setErrorMsg(
-          'Location access isn\'t enabled. Please allow location access from the site settings next to your browser\'s address bar. It also won\'t work if you open the file directly using file://—you need to use https:// or localhost.'
-        )
+        setErrorMsg('Location allow karo (https / localhost).')
       },
       { enableHighAccuracy: true, timeout: 12000 }
     )
@@ -55,12 +62,22 @@ export default function MapPage() {
     return (
       <div className="page page-narrow">
         <div className="eyebrow">Navigate</div>
-        <h1 className="page-title">Choose your destination</h1>
-        <p className="page-sub">Where you want to go?</p>
+        <h1 className="page-title">Building search</h1>
+        <p className="page-sub">Building choose karo — uske coordinates + aapki live GPS dikhengi.</p>
         <div className="field">
-          <select className="select-input" onChange={(e) => setParams({ dest: e.target.value })} defaultValue="">
-            <option value="" disabled>— Choose your destination —</option>
-            {BLOCKS.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+          <select
+            className="select-input"
+            onChange={(e) => setParams({ dest: e.target.value })}
+            defaultValue=""
+          >
+            <option value="" disabled>
+              — Building choose karo —
+            </option>
+            {BLOCKS.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name} ({b.lat.toFixed(5)}, {b.lng.toFixed(5)})
+              </option>
+            ))}
           </select>
         </div>
       </div>
@@ -71,9 +88,14 @@ export default function MapPage() {
     return (
       <div className="page page-narrow">
         <div className="eyebrow">{activeBlock?.name}</div>
-        <h1 className="page-title">Turn your location on</h1>
+        <h1 className="page-title">Turn on live location</h1>
         <p className="page-sub">
-          This helps us create the correct route from your current location to {activeBlock?.name} We do not store your location.
+          Destination coordinates:{' '}
+          <code>
+            {activeBlock?.lat.toFixed(6)}, {activeBlock?.lng.toFixed(6)}
+          </code>
+          <br />
+          Ab apni live GPS on karo — dono match karke distance milega.
         </p>
         <button className="btn btn-primary" onClick={enableLocation} disabled={locStatus === 'loading'}>
           {locStatus === 'loading' ? 'Detecting...' : 'Turn On Your Location'}
@@ -84,28 +106,26 @@ export default function MapPage() {
   }
 
   return (
-    <div className="page page-narrow">
-      <div className="map-toolbar">
+    <div className={navigating ? 'page-map-full' : 'page page-narrow'}>
+      <div className={navigating ? 'map-full-top' : 'map-toolbar'}>
         <div>
           <div className="eyebrow">{arrived ? 'Pahunch gaye' : 'Navigating to'}</div>
-          <h1 className="page-title" style={{ fontSize: 20, marginBottom: 0 }}>{activeBlock?.name}</h1>
+          <h1 className="page-title" style={{ fontSize: navigating ? 18 : 20, marginBottom: 0 }}>
+            {activeBlock?.name}
+          </h1>
         </div>
-      </div>
-
-      {arrived && (
-        <div className="glass-card" style={{ padding: '16px 18px', marginBottom: 16 }}>
-          <p className="status-note go" style={{ marginTop: 0 }}>
-            ✓ Aap {activeBlock?.name} Reached close to your destination
-          </p>
-          <Link className="btn btn-accent" to={`/building/${activeBlock.id}`} style={{ display: 'inline-block', textAlign: 'center', textDecoration: 'none' }}>
+        {arrived && (
+          <Link
+            className="btn btn-accent"
+            to={`/building/${activeBlock.id}`}
+            style={{ width: 'auto', textDecoration: 'none' }}
+          >
             Building details →
           </Link>
-        </div>
-      )}
+        )}
+      </div>
 
       <CampusMap userPos={userPos} block={activeBlock} onArrived={handleArrived} />
-
-      {locStatus === 'error' && <p className="status-note error">{errorMsg}</p>}
     </div>
   )
 }
