@@ -344,6 +344,146 @@ input.text-input:focus, select.select-input:focus, textarea.text-input:focus{ ou
   color:#fff;
   border:1px solid rgba(255,255,255,0.4);
 }
+
+/* Live GPS boy avatar at “You” */
+.you-avatar{
+  position:relative;
+  width:72px;
+  height:92px;
+  pointer-events:none;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:flex-end;
+}
+.you-avatar-pulse{
+  position:absolute;
+  left:50%;
+  bottom:2px;
+  width:34px;
+  height:34px;
+  margin-left:-17px;
+  border-radius:50%;
+  background:rgba(0,194,168,0.28);
+  border:2px solid rgba(0,194,168,0.75);
+  animation:youPulse 1.6s ease-out infinite;
+}
+.you-avatar-figure{
+  position:relative;
+  z-index:1;
+  width:28px;
+  height:52px;
+  animation:youBob 1.35s ease-in-out infinite;
+  filter:drop-shadow(0 4px 8px rgba(15,76,129,0.35));
+}
+.you-avatar-head{
+  position:absolute;
+  left:50%;
+  top:6px;
+  width:14px;
+  height:14px;
+  margin-left:-7px;
+  border-radius:50%;
+  background:#f1c27d;
+  border:1px solid rgba(90,60,30,0.25);
+}
+.you-avatar-hair{
+  position:absolute;
+  left:50%;
+  top:3px;
+  width:16px;
+  height:9px;
+  margin-left:-8px;
+  border-radius:10px 10px 4px 4px;
+  background:#3b2a1a;
+  z-index:1;
+}
+.you-avatar-torso{
+  position:absolute;
+  left:50%;
+  top:20px;
+  width:16px;
+  height:18px;
+  margin-left:-8px;
+  border-radius:6px;
+  background:linear-gradient(180deg,#2dd4bf,#00a892);
+  border:1px solid rgba(4,35,29,0.2);
+}
+.you-avatar-arm{
+  position:absolute;
+  top:22px;
+  width:5px;
+  height:14px;
+  border-radius:4px;
+  background:#00a892;
+}
+.you-avatar-arm-l{ left:1px; transform:rotate(18deg); transform-origin:top center; animation:armSwingL 1.1s ease-in-out infinite; }
+.you-avatar-arm-r{ right:1px; transform:rotate(-18deg); transform-origin:top center; animation:armSwingR 1.1s ease-in-out infinite; }
+.you-avatar-leg{
+  position:absolute;
+  bottom:0;
+  width:5px;
+  height:14px;
+  border-radius:3px;
+  background:#1e3a5f;
+}
+.you-avatar-leg-l{ left:7px; transform-origin:top center; animation:legSwingL 1.1s ease-in-out infinite; }
+.you-avatar-leg-r{ right:7px; transform-origin:top center; animation:legSwingR 1.1s ease-in-out infinite; }
+.you-avatar-label{
+  position:absolute;
+  z-index:2;
+  left:50%;
+  bottom:54px;
+  transform:translateX(-50%);
+  min-width:110px;
+  max-width:170px;
+  padding:5px 8px;
+  border-radius:10px;
+  background:#0F4C81;
+  color:#fff;
+  border:1px solid rgba(255,255,255,0.35);
+  box-shadow:0 6px 16px rgba(15,76,129,0.3);
+  text-align:center;
+  line-height:1.25;
+}
+.you-avatar-label strong{
+  display:block;
+  font-family:'Space Grotesk', sans-serif;
+  font-size:11px;
+  font-weight:700;
+}
+.you-avatar-label span{
+  display:block;
+  font-family:'IBM Plex Mono', monospace;
+  font-size:9px;
+  opacity:0.9;
+  word-break:break-all;
+}
+@keyframes youPulse{
+  0%{ transform:scale(0.7); opacity:0.9; }
+  70%{ transform:scale(1.55); opacity:0; }
+  100%{ transform:scale(1.55); opacity:0; }
+}
+@keyframes youBob{
+  0%,100%{ transform:translateY(0); }
+  50%{ transform:translateY(-4px); }
+}
+@keyframes armSwingL{
+  0%,100%{ transform:rotate(14deg); }
+  50%{ transform:rotate(-10deg); }
+}
+@keyframes armSwingR{
+  0%,100%{ transform:rotate(-14deg); }
+  50%{ transform:rotate(10deg); }
+}
+@keyframes legSwingL{
+  0%,100%{ transform:rotate(-12deg); }
+  50%{ transform:rotate(12deg); }
+}
+@keyframes legSwingR{
+  0%,100%{ transform:rotate(12deg); }
+  50%{ transform:rotate(-12deg); }
+}
 .map-float-single{
   position:absolute;
   z-index:2;

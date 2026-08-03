@@ -272,17 +272,29 @@ export default function CampusMap({ userPos, block, onArrived }) {
           </Marker>
 
           <Marker longitude={userPos.lng} latitude={userPos.lat} anchor="bottom">
-            <div className="coord-pin you-pin">
-              <div className="coord-pin-title">You (live)</div>
-              <div className="coord-pin-xy">
-                {fmtCoord(userPos.lat)}, {fmtCoord(userPos.lng)}
+            <div className="you-avatar" aria-label="You live location">
+              <div className="you-avatar-pulse" />
+              <div className="you-avatar-figure">
+                <span className="you-avatar-hair" />
+                <span className="you-avatar-head" />
+                <span className="you-avatar-torso" />
+                <span className="you-avatar-arm you-avatar-arm-l" />
+                <span className="you-avatar-arm you-avatar-arm-r" />
+                <span className="you-avatar-leg you-avatar-leg-l" />
+                <span className="you-avatar-leg you-avatar-leg-r" />
+              </div>
+              <div className="you-avatar-label">
+                <strong>You</strong>
+                <span>
+                  {fmtCoord(userPos.lat)}, {fmtCoord(userPos.lng)}
+                </span>
               </div>
             </div>
           </Marker>
         </Map>
       </div>
 
-      <div className="map-3d-badge">Dotted path · Arrows · Live distance</div>
+      <div className="map-3d-badge">You avatar · Dotted path · Arrows</div>
 
       <button type="button" className="map-float-btn map-float-single" onClick={fitBoth}>
         Fit both pins
