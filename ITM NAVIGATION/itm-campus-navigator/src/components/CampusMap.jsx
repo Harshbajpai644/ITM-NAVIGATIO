@@ -6,107 +6,64 @@ import { shortestCampusRoute } from '../data/campusGraph.js'
 import { haversineM } from '../utils/dijkstra.js'
 
 const MAP_STYLE = 'https://tiles.openfreemap.org/styles/liberty'
-const ROUTE_SOURCE = 'campus-route'
-const ROUTE_LAYERS = ['route-casing', 'route-line', 'route-arrows']
 
 function fmtCoord(n) {
   return Number(n).toFixed(6)
 }
 
-/** Add midpoints so short routes still paint as a clear solid line. */
-function densifyLine(coords, stepM = 8) {
-  if (!coords || coords.length < 2) return coords || []
-  const out = [coords[0]]
-  for (let i = 0; i < coords.length - 1; i++) {
-    const a = { lng: coords[i][0], lat: coords[i][1] }
-    const b = { lng: coords[i + 1][0], lat: coords[i + 1][1] }
-    const seg = haversineM(a, b)
-    const steps = Math.max(1, Math.ceil(seg / stepM))
-    for (let s = 1; s <= steps; s++) {
-      const t = s / steps
-      out.push([a.lng + (b.lng - a.lng) * t, a.lat + (b.lat - a.lat) * t])
+/** Project [lng,lat][] → screen px polyline + arrow heads (always visible SVG). */
+function useProjectedRoute(mapRef, pathCoords, viewState) {
+  const [screen, setScreen] = useState({ line: '', arrows: [] })
+
+  useEffect(() => {
+    const map = mapRef.current?.getMap?.()
+    if (!map || pathCoords.length < 2) {
+      setScreen({ line: '', arrows: [] })
+      return undefined
     }
-  }
-  return out
-}
 
-function removeRoute(map) {
-  if (!map?.getStyle) return
-  try {
-    for (const id of ROUTE_LAYERS) {
-      if (map.getLayer(id)) map.removeLayer(id)
+    const project = () => {
+      try {
+        const pts = pathCoords.map(([lng, lat]) => map.project({ lng, lat }))
+        const line = pts.map((p) => `${p.x},${p.y}`).join(' ')
+        const arrows = []
+        for (let i = 0; i < pts.length - 1; i++) {
+          const a = pts[i]
+          const b = pts[i + 1]
+          const dx = b.x - a.x
+          const dy = b.y - a.y
+          const len = Math.hypot(dx, dy)
+          if (len < 28) continue
+          // one arrow near segment mid
+          const t = 0.55
+          const x = a.x + dx * t
+          const y = a.y + dy * t
+          const ang = (Math.atan2(dy, dx) * 180) / Math.PI
+          arrows.push({ x, y, ang, key: `${i}-${Math.round(x)}-${Math.round(y)}` })
+        }
+        setScreen({ line, arrows })
+      } catch (_) {
+        setScreen({ line: '', arrows: [] })
+      }
     }
-    if (map.getSource(ROUTE_SOURCE)) map.removeSource(ROUTE_SOURCE)
-  } catch (_) {}
-}
 
-function paintRoute(map, coords) {
-  if (!map || !coords || coords.length < 2) return
-  const data = {
-    type: 'Feature',
-    properties: {},
-    geometry: { type: 'LineString', coordinates: densifyLine(coords, 6) },
-  }
+    project()
+    map.on('move', project)
+    map.on('zoom', project)
+    map.on('resize', project)
+    return () => {
+      map.off('move', project)
+      map.off('zoom', project)
+      map.off('resize', project)
+    }
+  }, [mapRef, pathCoords, viewState])
 
-  const src = map.getSource(ROUTE_SOURCE)
-  if (src) {
-    src.setData(data)
-    return
-  }
-
-  map.addSource(ROUTE_SOURCE, { type: 'geojson', data })
-
-  map.addLayer({
-    id: 'route-casing',
-    type: 'line',
-    source: ROUTE_SOURCE,
-    layout: { 'line-join': 'round', 'line-cap': 'round' },
-    paint: {
-      'line-color': '#ffffff',
-      'line-width': 10,
-      'line-opacity': 0.95,
-    },
-  })
-
-  map.addLayer({
-    id: 'route-line',
-    type: 'line',
-    source: ROUTE_SOURCE,
-    layout: { 'line-join': 'round', 'line-cap': 'round' },
-    paint: {
-      'line-color': '#00C2A8',
-      'line-width': 6,
-      'line-opacity': 1,
-    },
-  })
-
-  map.addLayer({
-    id: 'route-arrows',
-    type: 'symbol',
-    source: ROUTE_SOURCE,
-    layout: {
-      'symbol-placement': 'line',
-      'symbol-spacing': 36,
-      'text-field': '▶',
-      'text-size': 15,
-      'text-keep-upright': false,
-      'text-rotation-alignment': 'map',
-      'text-pitch-alignment': 'viewport',
-      'text-allow-overlap': true,
-      'text-ignore-placement': true,
-    },
-    paint: {
-      'text-color': '#0F4C81',
-      'text-halo-color': '#ffffff',
-      'text-halo-width': 1.5,
-    },
-  })
+  return screen
 }
 
 export default function CampusMap({ userPos, block, onArrived }) {
   const mapRef = useRef(null)
   const lastRoutedPos = useRef(null)
-  const [mapReady, setMapReady] = useState(false)
 
   const [viewState, setViewState] = useState({
     longitude: block?.lng ?? CAMPUS_CENTER.lng,
@@ -115,6 +72,7 @@ export default function CampusMap({ userPos, block, onArrived }) {
     pitch: 0,
     bearing: 0,
   })
+  const [mapTick, setMapTick] = useState(0)
   const [routeCoords, setRouteCoords] = useState([])
   const [routeDistanceM, setRouteDistanceM] = useState(null)
   const [routeMinutes, setRouteMinutes] = useState(null)
@@ -135,6 +93,9 @@ export default function CampusMap({ userPos, block, onArrived }) {
     }
     return []
   }, [routeCoords, userPos, block])
+
+  // include mapTick so we re-project after map load
+  const projected = useProjectedRoute(mapRef, pathCoords, { ...viewState, mapTick })
 
   const fitBoth = useCallback(() => {
     if (!mapRef.current || !userPos || !block) return
@@ -192,29 +153,6 @@ export default function CampusMap({ userPos, block, onArrived }) {
     }
   }, [userPos, block, liveDistanceM])
 
-  // Draw solid path on the MapLibre map (imperative = always visible)
-  useEffect(() => {
-    const map = mapRef.current?.getMap?.()
-    if (!map || !mapReady || pathCoords.length < 2) return
-
-    const draw = () => {
-      if (!map.isStyleLoaded()) return
-      try {
-        paintRoute(map, pathCoords)
-      } catch (_) {}
-    }
-
-    if (map.isStyleLoaded()) {
-      draw()
-      return undefined
-    }
-
-    map.once('load', draw)
-    return () => {
-      map.off('load', draw)
-    }
-  }, [pathCoords, mapReady])
-
   useEffect(() => {
     if (!onArrived || liveDistanceM == null) return
     if (liveDistanceM < 40) onArrived()
@@ -225,16 +163,7 @@ export default function CampusMap({ userPos, block, onArrived }) {
   }, [])
 
   const onLoad = useCallback(() => {
-    setMapReady(true)
-    const map = mapRef.current?.getMap?.()
-    if (map && pathCoords.length > 1) paintRoute(map, pathCoords)
-  }, [pathCoords])
-
-  useEffect(() => {
-    return () => {
-      const map = mapRef.current?.getMap?.()
-      if (map) removeRoute(map)
-    }
+    setMapTick((t) => t + 1)
   }, [])
 
   if (!userPos || !block) return null
@@ -244,7 +173,7 @@ export default function CampusMap({ userPos, block, onArrived }) {
 
   return (
     <div className="map-card map-card-full" style={{ position: 'relative' }}>
-      <div className="maplibre-3d-full">
+      <div className="maplibre-3d-full" style={{ position: 'relative' }}>
         <Map
           ref={mapRef}
           {...viewState}
@@ -287,6 +216,34 @@ export default function CampusMap({ userPos, block, onArrived }) {
             </div>
           </Marker>
         </Map>
+
+        {/* Solid path drawn in SVG on top of map — always visible */}
+        {projected.line && (
+          <svg className="route-svg-overlay" aria-hidden="true">
+            <polyline
+              points={projected.line}
+              fill="none"
+              stroke="#ffffff"
+              strokeWidth="10"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              opacity="0.95"
+            />
+            <polyline
+              points={projected.line}
+              fill="none"
+              stroke="#00C2A8"
+              strokeWidth="6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            {projected.arrows.map((a) => (
+              <g key={a.key} transform={`translate(${a.x} ${a.y}) rotate(${a.ang})`}>
+                <polygon points="0,-5 12,0 0,5" fill="#0F4C81" stroke="#ffffff" strokeWidth="1" />
+              </g>
+            ))}
+          </svg>
+        )}
       </div>
 
       <div className="map-3d-badge">Dijkstra shortest · Solid path · Arrows</div>
