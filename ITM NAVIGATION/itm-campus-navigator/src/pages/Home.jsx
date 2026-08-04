@@ -4,7 +4,15 @@ export default function Home() {
   return (
     <section className="walk-landing" aria-label="ITM Navigator home">
       <div className="walk-landing-media" aria-hidden="true">
-        <div className="walk-landing-bg" />
+        <img
+          className="walk-landing-photo"
+          src="/campus-walk.jpg"
+          alt=""
+          onError={(e) => {
+            e.currentTarget.onerror = null
+            e.currentTarget.src = '/kirloskar-block.jpg'
+          }}
+        />
         <div className="walk-landing-shade" />
         <div className="walk-path">
           <span />
@@ -21,9 +29,15 @@ export default function Home() {
             <img
               className="walk-landing-logo-img"
               src="/itm-logo.png"
-              alt="ITM University Gwalior — Celebrating Dreams"
+              alt="ITM University Gwalior"
               width="160"
               height="60"
+              onError={(e) => {
+                const el = e.currentTarget
+                if (el.dataset.tried === '1') return
+                el.dataset.tried = '1'
+                el.src = '/itmlogo.png'
+              }}
             />
           </div>
         </header>
