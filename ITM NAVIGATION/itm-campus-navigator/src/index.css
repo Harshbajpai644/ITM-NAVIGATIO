@@ -965,15 +965,15 @@ footer.site-footer .demo-note{ margin-top:4px; font-size:9.5px; opacity:0.75; }
   color:var(--slate);
 }
 .dest-picker-hero{
-  text-align:center;
-  padding:10px 0 2px;
+  text-align:left;
+  padding:14px 0 2px;
   animation:walkRise 0.7s 0.05s ease both;
 }
 .dest-picker-hero h1{
   margin:0;
   font-family:'Space Grotesk', sans-serif;
   font-weight:700;
-  font-size:clamp(28px, 7vw, 40px);
+  font-size:clamp(30px, 7.5vw, 42px);
   line-height:1.05;
   letter-spacing:-0.02em;
   color:var(--primary);
