@@ -20,10 +20,10 @@ export default function Home() {
           <div className="walk-landing-logo" aria-label="ITM University Gwalior">
             <img
               className="walk-landing-logo-img"
-              src="/itm-logo.svg"
+              src="/itm-logo.png"
               alt="ITM University Gwalior — Celebrating Dreams"
               width="160"
-              height="105"
+              height="60"
             />
           </div>
         </header>

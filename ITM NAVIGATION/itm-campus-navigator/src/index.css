@@ -99,11 +99,11 @@ a{ color:inherit; }
   align-items:center;
 }
 .walk-landing-logo-img{
-  width:min(42vw, 148px);
+  width:min(46vw, 168px);
   height:auto;
-  color:var(--primary);
-  /* SVG uses currentColor — ensure readable on bright campus photo */
-  filter:drop-shadow(0 1px 0 rgba(255,255,255,0.65));
+  display:block;
+  object-fit:contain;
+  filter:drop-shadow(0 1px 0 rgba(255,255,255,0.55));
 }
 
 .walk-landing-main{
@@ -139,30 +139,35 @@ a{ color:inherit; }
 .walk-path{
   position:absolute;
   left:50%;
-  bottom:22%;
-  transform:translateX(-50%);
+  bottom:10%;
   z-index:1;
   display:flex;
   flex-direction:column;
   align-items:center;
-  gap:10px;
+  gap:6px;
   pointer-events:none;
+  /* Lay chevrons flat on the pavement, not up the building */
+  transform:translateX(-50%) perspective(520px) rotateX(62deg);
+  transform-origin:center bottom;
+  height:28%;
+  justify-content:flex-end;
 }
 .walk-path span{
   width:0;
   height:0;
-  border-left:14px solid transparent;
-  border-right:14px solid transparent;
-  border-bottom:16px solid rgba(0,194,168,0.55);
-  filter:drop-shadow(0 4px 10px rgba(0,194,168,0.35));
+  flex:0 0 auto;
+  border-left:16px solid transparent;
+  border-right:16px solid transparent;
+  border-bottom:18px solid rgba(0,194,168,0.72);
+  filter:drop-shadow(0 6px 8px rgba(0,194,168,0.28));
   animation:walkChevron 1.6s ease-in-out infinite;
-  transform:rotate(180deg);
+  transform:rotate(180deg) scale(1);
 }
-.walk-path span:nth-child(1){ animation-delay:0s; opacity:0.95; }
-.walk-path span:nth-child(2){ animation-delay:0.12s; opacity:0.8; width:auto; }
-.walk-path span:nth-child(3){ animation-delay:0.24s; opacity:0.65; }
-.walk-path span:nth-child(4){ animation-delay:0.36s; opacity:0.5; }
-.walk-path span:nth-child(5){ animation-delay:0.48s; opacity:0.35; }
+.walk-path span:nth-child(1){ animation-delay:0s; opacity:0.95; transform:rotate(180deg) scale(1.15); }
+.walk-path span:nth-child(2){ animation-delay:0.12s; opacity:0.82; transform:rotate(180deg) scale(1); }
+.walk-path span:nth-child(3){ animation-delay:0.24s; opacity:0.68; transform:rotate(180deg) scale(0.86); }
+.walk-path span:nth-child(4){ animation-delay:0.36s; opacity:0.52; transform:rotate(180deg) scale(0.72); }
+.walk-path span:nth-child(5){ animation-delay:0.48s; opacity:0.38; transform:rotate(180deg) scale(0.58); }
 
 .walk-landing-cta-wrap{
   display:flex;
@@ -204,8 +209,8 @@ a{ color:inherit; }
   to{ opacity:1; transform:translateY(0); }
 }
 @keyframes walkChevron{
-  0%,100%{ transform:rotate(180deg) translateY(0); opacity:0.35; }
-  40%{ transform:rotate(180deg) translateY(6px); opacity:1; }
+  0%,100%{ opacity:0.4; }
+  40%{ opacity:1; }
 }
 
 /* Desktop: same brand, split layout */
@@ -232,14 +237,16 @@ a{ color:inherit; }
     background:linear-gradient(90deg, rgba(238,245,250,0.65) 0%, transparent 30%);
   }
   .walk-path{
-    left:42%;
-    bottom:18%;
-    gap:14px;
+    left:48%;
+    bottom:7%;
+    height:34%;
+    gap:8px;
+    transform:translateX(-50%) perspective(640px) rotateX(58deg);
   }
   .walk-path span{
-    border-left-width:18px;
-    border-right-width:18px;
-    border-bottom-width:20px;
+    border-left-width:22px;
+    border-right-width:22px;
+    border-bottom-width:24px;
   }
   .walk-landing-content{
     order:1;
@@ -273,7 +280,11 @@ a{ color:inherit; }
 }
 
 @media (max-width: 899px){
-  .walk-path{ bottom:26%; }
+  .walk-path{
+    bottom:14%;
+    height:26%;
+    left:50%;
+  }
 }
 
 
