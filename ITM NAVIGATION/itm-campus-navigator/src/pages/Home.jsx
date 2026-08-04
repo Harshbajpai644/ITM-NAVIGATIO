@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import itmLogo from '../assets/itm-logo.png'
 
 export default function Home() {
   return (
@@ -28,16 +29,10 @@ export default function Home() {
           <div className="walk-landing-logo" aria-label="ITM University Gwalior">
             <img
               className="walk-landing-logo-img"
-              src="/itm-logo.png"
+              src={itmLogo}
               alt="ITM University Gwalior"
               width="160"
               height="60"
-              onError={(e) => {
-                const el = e.currentTarget
-                if (el.dataset.tried === '1') return
-                el.dataset.tried = '1'
-                el.src = '/itmlogo.png'
-              }}
             />
           </div>
         </header>
