@@ -162,15 +162,15 @@ export default function MapPage() {
               <span className="dest-picker-mark" aria-hidden="true" />
               <span>
                 <strong>ITM NAVIGATOR</strong>
-                <em>Where do you want to go?</em>
+                <em>Kahan jaana hai?</em>
               </span>
             </Link>
           </header>
 
           <div className="dest-picker-hero">
-            <h1>Choose a destination</h1>
+            <h1>Destination choose karo</h1>
             <p>
-              Campus path with <em>live GPS</em>
+              Campus pe rasta, <em>live GPS</em> se
             </p>
           </div>
 
@@ -183,7 +183,7 @@ export default function MapPage() {
               type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search buildings..."
+              placeholder="Building search..."
               autoComplete="off"
             />
           </label>
@@ -217,7 +217,7 @@ export default function MapPage() {
               </li>
             ))}
             {filteredBlocks.length === 0 && (
-              <li className="dest-empty">No buildings match your search.</li>
+              <li className="dest-empty">Koi building match nahi hui.</li>
             )}
           </ul>
         </div>
