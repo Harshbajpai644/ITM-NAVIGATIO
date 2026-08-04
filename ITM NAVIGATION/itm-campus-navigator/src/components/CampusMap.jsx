@@ -309,9 +309,9 @@ export default function CampusMap({ userPos, block, onArrived, onCalibratePin })
             type="button"
             className="map-float-btn map-float-btn-accent"
             onClick={onCalibratePin}
-            title="Agar aap building ke bilkul saamne/andar khade ho to pin yahan set ho jayegi"
+            title="Stand at the building entrance, then set the pin to your current GPS position"
           >
-            Pin yahan set karo
+            Set pin here
           </button>
         )}
       </div>
@@ -319,9 +319,9 @@ export default function CampusMap({ userPos, block, onArrived, onCalibratePin })
       <div className="map-coord-panel">
         {directionUnreliable && (
           <div className="map-gps-warn">
-            GPS accuracy (±{accuracyM} m) distance ({shownDistance} m) se badi hai — isliye{' '}
-            {block.name} galat direction dikh sakta hai. Open sky mein 10–20 sec wait karo, ya
-            building pe khade hokar <strong>Pin yahan set karo</strong> dabao.
+            GPS accuracy (±{accuracyM} m) is larger than the distance ({shownDistance} m), so{' '}
+            {block.name} may show the wrong direction. Wait 10–20 seconds in open sky, or stand at
+            the building and tap <strong>Set pin here</strong>.
           </div>
         )}
         <div className="map-coord-row">

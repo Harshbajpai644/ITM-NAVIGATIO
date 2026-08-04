@@ -26,6 +26,22 @@ function savePinOverride(id, lat, lng) {
   return all
 }
 
+function categoryLabel(category) {
+  const key = String(category || '').toLowerCase()
+  if (key === 'library') return 'Library'
+  if (key === 'hostel') return 'Hostel'
+  if (key === 'admission') return 'Admission'
+  if (key === 'canteen') return 'Canteen'
+  if (key === 'blocks') return 'Academic'
+  if (key.includes('engineering')) return 'Academic'
+  if (key.includes('management')) return 'Academic'
+  if (key.includes('nursing')) return 'Academic'
+  if (key.includes('fashion') || key.includes('design')) return 'Academic'
+  if (key.includes('physical') || key.includes('sport')) return 'Sports'
+  if (key.includes('admin')) return 'Administrative'
+  return 'Campus'
+}
+
 export default function MapPage() {
   const [params, setParams] = useSearchParams()
   const destId = params.get('dest') || ''
@@ -35,6 +51,7 @@ export default function MapPage() {
   const [arrived, setArrived] = useState(false)
   const [pinOverrides, setPinOverrides] = useState(() => loadPinOverrides())
   const [calibrateMsg, setCalibrateMsg] = useState('')
+  const [query, setQuery] = useState('')
 
   const baseBlock = BLOCKS.find((b) => b.id === destId)
 
@@ -44,6 +61,15 @@ export default function MapPage() {
     if (!ov) return baseBlock
     return { ...baseBlock, lat: ov.lat, lng: ov.lng }
   }, [baseBlock, pinOverrides])
+
+  const filteredBlocks = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return BLOCKS
+    return BLOCKS.filter((b) => {
+      const hay = `${b.name} ${b.category} ${categoryLabel(b.category)}`.toLowerCase()
+      return hay.includes(q)
+    })
+  }, [query])
 
   const navigating = Boolean(destId && locStatus === 'granted' && userPos)
 
@@ -57,7 +83,6 @@ export default function MapPage() {
           accuracy: pos.coords.accuracy,
         }
         setUserPos((prev) => {
-          // Keep better (smaller) accuracy fixes; drop much worse jumps
           if (
             prev?.accuracy != null &&
             next.accuracy != null &&
@@ -71,7 +96,7 @@ export default function MapPage() {
       },
       () => {
         setLocStatus('error')
-        setErrorMsg('Location error. GPS on hai? Phone pe Precise / High Accuracy location ON karo.')
+        setErrorMsg('Location error. Turn on GPS and enable Precise / High Accuracy location.')
       },
       GPS_OPTS
     )
@@ -81,7 +106,7 @@ export default function MapPage() {
   const enableLocation = () => {
     if (!('geolocation' in navigator)) {
       setLocStatus('error')
-      setErrorMsg('Browser location support nahi karta.')
+      setErrorMsg('This browser does not support location.')
       return
     }
     setLocStatus('loading')
@@ -96,7 +121,7 @@ export default function MapPage() {
       },
       () => {
         setLocStatus('error')
-        setErrorMsg('Location allow karo (https / localhost). Precise location ON rakho.')
+        setErrorMsg('Allow location access (https / localhost). Keep Precise location ON.')
       },
       GPS_OPTS
     )
@@ -108,62 +133,124 @@ export default function MapPage() {
     if (!userPos || !activeBlock) return
     if (userPos.accuracy != null && userPos.accuracy > 35) {
       setCalibrateMsg(
-        `GPS abhi ±${Math.round(userPos.accuracy)} m hai. Open sky mein wait karo, ±35 m se better hone pe pin set karo.`
+        `GPS accuracy is ±${Math.round(userPos.accuracy)} m. Wait in open sky until it is better than ±35 m, then set the pin.`
       )
       return
     }
     const next = savePinOverride(activeBlock.id, userPos.lat, userPos.lng)
     setPinOverrides(next)
     setCalibrateMsg(
-      `${activeBlock.name} pin update: ${userPos.lat.toFixed(6)}, ${userPos.lng.toFixed(6)}`
+      `${activeBlock.name} pin updated: ${userPos.lat.toFixed(6)}, ${userPos.lng.toFixed(6)}`
     )
   }, [userPos, activeBlock])
 
+  const chooseDestination = (id) => {
+    setArrived(false)
+    setCalibrateMsg('')
+    setParams({ dest: id })
+  }
+
   if (!destId) {
     return (
-      <div className="page page-narrow">
-        <div className="eyebrow">Navigate</div>
-        <h1 className="page-title">Building search</h1>
-        <p className="page-sub">Building choose karo — live GPS + exact destination pin.</p>
-        <div className="field">
-          <select
-            className="select-input"
-            onChange={(e) => setParams({ dest: e.target.value })}
-            defaultValue=""
-          >
-            <option value="" disabled>
-              — Building choose karo —
-            </option>
-            {BLOCKS.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.name} ({b.lat.toFixed(5)}, {b.lng.toFixed(5)})
-              </option>
+      <section className="dest-picker" aria-label="Choose destination">
+        <div className="dest-picker-bg" aria-hidden="true" />
+        <div className="dest-picker-shade" aria-hidden="true" />
+
+        <div className="dest-picker-inner">
+          <header className="dest-picker-top">
+            <Link to="/" className="dest-picker-brand">
+              <span className="dest-picker-mark" aria-hidden="true" />
+              <span>
+                <strong>ITM NAVIGATOR</strong>
+                <em>Where do you want to go?</em>
+              </span>
+            </Link>
+          </header>
+
+          <div className="dest-picker-hero">
+            <h1>Choose a destination</h1>
+            <p>
+              Campus path with <em>live GPS</em>
+            </p>
+          </div>
+
+          <label className="dest-search" htmlFor="dest-search-input">
+            <span className="dest-search-icon" aria-hidden="true">
+              ⌕
+            </span>
+            <input
+              id="dest-search-input"
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search buildings..."
+              autoComplete="off"
+            />
+          </label>
+
+          <ul className="dest-list" role="list">
+            {filteredBlocks.map((b) => (
+              <li key={b.id}>
+                <button
+                  type="button"
+                  className="dest-row"
+                  onClick={() => chooseDestination(b.id)}
+                >
+                  <img
+                    className="dest-row-photo"
+                    src={b.image}
+                    alt=""
+                    loading="lazy"
+                    onError={(e) => {
+                      e.currentTarget.onerror = null
+                      e.currentTarget.src = '/campus-walk.jpg'
+                    }}
+                  />
+                  <span className="dest-row-text">
+                    <strong>{b.name}</strong>
+                    <span>{categoryLabel(b.category)}</span>
+                  </span>
+                  <span className="dest-row-chevron" aria-hidden="true">
+                    ›
+                  </span>
+                </button>
+              </li>
             ))}
-          </select>
+            {filteredBlocks.length === 0 && (
+              <li className="dest-empty">No buildings match your search.</li>
+            )}
+          </ul>
         </div>
-      </div>
+      </section>
     )
   }
 
   if (locStatus !== 'granted') {
     return (
-      <div className="page page-narrow">
-        <div className="eyebrow">{activeBlock?.name}</div>
-        <h1 className="page-title">Turn on live location</h1>
-        <p className="page-sub">
-          Destination:{' '}
-          <code>
-            {activeBlock?.lat.toFixed(6)}, {activeBlock?.lng.toFixed(6)}
-          </code>
-          <br />
-          Precise GPS on karo. Agar pin galat direction dikhe to building pe khade hokar map pe
-          “Pin yahan set karo” use karna.
-        </p>
-        <button className="btn btn-primary" onClick={enableLocation} disabled={locStatus === 'loading'}>
-          {locStatus === 'loading' ? 'Detecting...' : 'Turn On Your Location'}
-        </button>
-        {locStatus === 'error' && <p className="status-note error">{errorMsg}</p>}
-      </div>
+      <section className="dest-picker dest-picker-compact" aria-label="Enable location">
+        <div className="dest-picker-bg" aria-hidden="true" />
+        <div className="dest-picker-shade" aria-hidden="true" />
+        <div className="dest-picker-inner dest-gps-panel">
+          <Link to="/map" className="dest-back">
+            ← Change destination
+          </Link>
+          <div className="eyebrow">{activeBlock?.name}</div>
+          <h1 className="page-title">Turn on live location</h1>
+          <p className="page-sub">
+            Destination:{' '}
+            <code>
+              {activeBlock?.lat.toFixed(6)}, {activeBlock?.lng.toFixed(6)}
+            </code>
+            <br />
+            Enable precise GPS. If the pin looks wrong, stand at the building and use “Set pin here” on
+            the map.
+          </p>
+          <button className="btn btn-primary" onClick={enableLocation} disabled={locStatus === 'loading'}>
+            {locStatus === 'loading' ? 'Detecting…' : 'Turn on your location'}
+          </button>
+          {locStatus === 'error' && <p className="status-note error">{errorMsg}</p>}
+        </div>
+      </section>
     )
   }
 
@@ -171,11 +258,15 @@ export default function MapPage() {
     <div className={navigating ? 'page-map-full' : 'page page-narrow'}>
       <div className={navigating ? 'map-full-top' : 'map-toolbar'}>
         <div>
-          <div className="eyebrow">{arrived ? 'Pahunch gaye' : 'Navigating to'}</div>
+          <div className="eyebrow">{arrived ? 'You have arrived' : 'Navigating to'}</div>
           <h1 className="page-title" style={{ fontSize: navigating ? 18 : 20, marginBottom: 0 }}>
             {activeBlock?.name}
           </h1>
-          {calibrateMsg && <p className="status-note go" style={{ margin: '6px 0 0' }}>{calibrateMsg}</p>}
+          {calibrateMsg && (
+            <p className="status-note go" style={{ margin: '6px 0 0' }}>
+              {calibrateMsg}
+            </p>
+          )}
         </div>
         {arrived && (
           <Link

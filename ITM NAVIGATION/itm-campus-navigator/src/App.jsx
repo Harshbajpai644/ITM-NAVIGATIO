@@ -11,12 +11,19 @@ import { useTheme } from './hooks/useTheme.js'
 function Shell({ theme, toggle }) {
   const location = useLocation()
   const isHome = location.pathname === '/'
-  const hideFooter =
-    isHome || (location.pathname === '/map' && new URLSearchParams(location.search).has('dest'))
-  const hideNavbar = isHome
+  const isMap = location.pathname === '/map'
+  const hasDest = isMap && new URLSearchParams(location.search).has('dest')
+  const isDestPicker = isMap && !hasDest
+  const hideFooter = isHome || isDestPicker || hasDest
+  const hideNavbar = isHome || isDestPicker
+  const shellClass = hideNavbar
+    ? 'app-shell app-shell-landing'
+    : hasDest
+      ? 'app-shell app-shell-map'
+      : 'app-shell'
 
   return (
-    <div className={hideNavbar ? 'app-shell app-shell-landing' : hideFooter && location.pathname === '/map' ? 'app-shell app-shell-map' : 'app-shell'}>
+    <div className={shellClass}>
       {!hideNavbar && <Navbar theme={theme} onToggleTheme={toggle} />}
       <Routes>
         <Route path="/" element={<Home />} />

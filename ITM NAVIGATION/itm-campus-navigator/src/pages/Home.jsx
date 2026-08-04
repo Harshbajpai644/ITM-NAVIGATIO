@@ -44,7 +44,7 @@ export default function Home() {
             NAVIGATOR
           </h1>
           <p className="walk-landing-tagline">
-            Campus pe rasta, <em>live GPS</em> se
+            Campus path with <em>live GPS</em>
           </p>
         </div>
 
