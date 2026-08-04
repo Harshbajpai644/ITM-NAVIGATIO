@@ -10,11 +10,14 @@ import { useTheme } from './hooks/useTheme.js'
 
 function Shell({ theme, toggle }) {
   const location = useLocation()
-  const hideFooter = location.pathname === '/map' && new URLSearchParams(location.search).has('dest')
+  const isHome = location.pathname === '/'
+  const hideFooter =
+    isHome || (location.pathname === '/map' && new URLSearchParams(location.search).has('dest'))
+  const hideNavbar = isHome
 
   return (
-    <div className={hideFooter ? 'app-shell app-shell-map' : 'app-shell'}>
-      <Navbar theme={theme} onToggleTheme={toggle} />
+    <div className={hideNavbar ? 'app-shell app-shell-landing' : hideFooter && location.pathname === '/map' ? 'app-shell app-shell-map' : 'app-shell'}>
+      {!hideNavbar && <Navbar theme={theme} onToggleTheme={toggle} />}
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/map" element={<MapPage />} />
