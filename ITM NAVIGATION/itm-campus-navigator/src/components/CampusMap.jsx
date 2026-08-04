@@ -20,14 +20,34 @@ function fmtCoord(n) {
   return Number(n).toFixed(6)
 }
 
-/** Project [lng,lat][] → screen px polyline + arrow heads. */
-function useProjectedRoute(mapRef, pathCoords, viewState) {
-  const [screen, setScreen] = useState({ line: '', arrows: [] })
+/** Compass label from you → destination (map north-up). */
+function bearingLabel(from, to) {
+  const toRad = (d) => (d * Math.PI) / 180
+  const toDeg = (r) => (r * 180) / Math.PI
+  const y = Math.sin(toRad(to.lng - from.lng)) * Math.cos(toRad(to.lat))
+  const x =
+    Math.cos(toRad(from.lat)) * Math.sin(toRad(to.lat)) -
+    Math.sin(toRad(from.lat)) * Math.cos(toRad(to.lat)) * Math.cos(toRad(to.lng - from.lng))
+  let brng = (toDeg(Math.atan2(y, x)) + 360) % 360
+  const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']
+  return dirs[Math.round(brng / 45) % 8]
+}
+
+/** meters → screen pixels at current map center latitude/zoom (approx). */
+function metersToPixels(map, lat, meters) {
+  const zoom = map.getZoom()
+  const latRad = (lat * Math.PI) / 180
+  const metersPerPx = (156543.03392 * Math.cos(latRad)) / Math.pow(2, zoom)
+  return meters / metersPerPx
+}
+
+function useProjectedRoute(mapRef, pathCoords, userPos, accuracyM, viewState) {
+  const [screen, setScreen] = useState({ line: '', arrows: [], you: null, accR: 0 })
 
   useEffect(() => {
     const map = mapRef.current?.getMap?.()
     if (!map || pathCoords.length < 2) {
-      setScreen({ line: '', arrows: [] })
+      setScreen({ line: '', arrows: [], you: null, accR: 0 })
       return undefined
     }
 
@@ -44,14 +64,24 @@ function useProjectedRoute(mapRef, pathCoords, viewState) {
           const len = Math.hypot(dx, dy)
           if (len < 28) continue
           const t = 0.55
-          const x = a.x + dx * t
-          const y = a.y + dy * t
-          const ang = (Math.atan2(dy, dx) * 180) / Math.PI
-          arrows.push({ x, y, ang, key: `${i}-${Math.round(x)}-${Math.round(y)}` })
+          arrows.push({
+            x: a.x + dx * t,
+            y: a.y + dy * t,
+            ang: (Math.atan2(dy, dx) * 180) / Math.PI,
+            key: `${i}-${Math.round(a.x)}`,
+          })
         }
-        setScreen({ line, arrows })
+        let you = null
+        let accR = 0
+        if (userPos) {
+          you = map.project({ lng: userPos.lng, lat: userPos.lat })
+          if (accuracyM != null && accuracyM > 0) {
+            accR = metersToPixels(map, userPos.lat, accuracyM)
+          }
+        }
+        setScreen({ line, arrows, you, accR })
       } catch (_) {
-        setScreen({ line: '', arrows: [] })
+        setScreen({ line: '', arrows: [], you: null, accR: 0 })
       }
     }
 
@@ -64,12 +94,12 @@ function useProjectedRoute(mapRef, pathCoords, viewState) {
       map.off('zoom', project)
       map.off('resize', project)
     }
-  }, [mapRef, pathCoords, viewState])
+  }, [mapRef, pathCoords, userPos, accuracyM, viewState])
 
   return screen
 }
 
-export default function CampusMap({ userPos, block, onArrived }) {
+export default function CampusMap({ userPos, block, onArrived, onCalibratePin }) {
   const mapRef = useRef(null)
 
   const [viewState, setViewState] = useState({
@@ -81,13 +111,11 @@ export default function CampusMap({ userPos, block, onArrived }) {
   })
   const [mapTick, setMapTick] = useState(0)
 
-  // Exact live GPS ↔ destination distance (no Dijkstra / no hubs)
   const liveDistanceM = useMemo(() => {
     if (!userPos || !block) return null
     return haversineM(userPos, block)
   }, [userPos, block])
 
-  // Straight accurate line: your live coords → destination coords
   const pathCoords = useMemo(() => {
     if (!userPos || !block) return []
     return [
@@ -96,23 +124,49 @@ export default function CampusMap({ userPos, block, onArrived }) {
     ]
   }, [userPos, block])
 
-  const projected = useProjectedRoute(mapRef, pathCoords, { ...viewState, mapTick })
+  const accuracyM =
+    userPos?.accuracy != null && Number.isFinite(userPos.accuracy)
+      ? Math.round(userPos.accuracy)
+      : null
+
+  // Direction unreliable when GPS circle is bigger than (or close to) distance
+  const directionUnreliable =
+    accuracyM != null && liveDistanceM != null && accuracyM >= Math.max(25, liveDistanceM * 0.8)
+
+  const dir = useMemo(() => {
+    if (!userPos || !block) return null
+    return bearingLabel(userPos, block)
+  }, [userPos, block])
+
+  const projected = useProjectedRoute(
+    mapRef,
+    pathCoords,
+    userPos,
+    accuracyM,
+    { ...viewState, mapTick }
+  )
 
   const fitBoth = useCallback(() => {
     if (!mapRef.current || !userPos || !block) return
     try {
       const map = mapRef.current.getMap()
+      const padAcc = accuracyM ? accuracyM / 111320 : 0
       map.fitBounds(
         [
-          [Math.min(userPos.lng, block.lng), Math.min(userPos.lat, block.lat)],
-          [Math.max(userPos.lng, block.lng), Math.max(userPos.lat, block.lat)],
+          [
+            Math.min(userPos.lng, block.lng) - padAcc,
+            Math.min(userPos.lat, block.lat) - padAcc,
+          ],
+          [
+            Math.max(userPos.lng, block.lng) + padAcc,
+            Math.max(userPos.lat, block.lat) + padAcc,
+          ],
         ],
         { padding: 100, duration: 600, maxZoom: 19, pitch: 0 }
       )
     } catch (_) {}
-  }, [userPos, block])
+  }, [userPos, block, accuracyM])
 
-  // Keep camera centered between accurate pins
   useEffect(() => {
     if (!userPos || !block) return
     const d = liveDistanceM ?? Infinity
@@ -130,9 +184,9 @@ export default function CampusMap({ userPos, block, onArrived }) {
   }, [userPos, block, liveDistanceM, fitBoth])
 
   useEffect(() => {
-    if (!onArrived || liveDistanceM == null) return
-    if (liveDistanceM < 25) onArrived()
-  }, [liveDistanceM, onArrived])
+    if (!onArrived || liveDistanceM == null || directionUnreliable) return
+    if (liveDistanceM < 20) onArrived()
+  }, [liveDistanceM, onArrived, directionUnreliable])
 
   const onMove = useCallback((evt) => {
     setViewState(evt.viewState)
@@ -146,10 +200,7 @@ export default function CampusMap({ userPos, block, onArrived }) {
 
   const shownDistance = Math.round(liveDistanceM ?? 0)
   const shownMinutes = Math.max(1, Math.round(shownDistance / 80))
-  const accuracyM =
-    userPos.accuracy != null && Number.isFinite(userPos.accuracy)
-      ? Math.round(userPos.accuracy)
-      : null
+  const lineColor = directionUnreliable ? '#94a3b8' : '#00C2A8'
 
   return (
     <div className="map-card map-card-full" style={{ position: 'relative' }}>
@@ -198,45 +249,86 @@ export default function CampusMap({ userPos, block, onArrived }) {
           </Marker>
         </Map>
 
-        {projected.line && (
-          <svg className="route-svg-overlay" aria-hidden="true">
-            <polyline
-              points={projected.line}
-              fill="none"
-              stroke="#ffffff"
-              strokeWidth="10"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              opacity="0.95"
+        <svg className="route-svg-overlay" aria-hidden="true">
+          {/* GPS accuracy circle — real uncertainty around You */}
+          {projected.you && projected.accR > 4 && (
+            <circle
+              cx={projected.you.x}
+              cy={projected.you.y}
+              r={projected.accR}
+              fill="rgba(15,76,129,0.12)"
+              stroke="#0F4C81"
+              strokeWidth="2"
+              strokeDasharray="6 4"
             />
-            <polyline
-              points={projected.line}
-              fill="none"
-              stroke="#00C2A8"
-              strokeWidth="6"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-            {projected.arrows.map((a) => (
-              <g key={a.key} transform={`translate(${a.x} ${a.y}) rotate(${a.ang})`}>
-                <polygon points="0,-5 12,0 0,5" fill="#0F4C81" stroke="#ffffff" strokeWidth="1" />
-              </g>
-            ))}
-          </svg>
+          )}
+
+          {projected.line && (
+            <>
+              <polyline
+                points={projected.line}
+                fill="none"
+                stroke="#ffffff"
+                strokeWidth="10"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                opacity="0.95"
+              />
+              <polyline
+                points={projected.line}
+                fill="none"
+                stroke={lineColor}
+                strokeWidth="6"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeDasharray={directionUnreliable ? '10 8' : undefined}
+              />
+              {!directionUnreliable &&
+                projected.arrows.map((a) => (
+                  <g key={a.key} transform={`translate(${a.x} ${a.y}) rotate(${a.ang})`}>
+                    <polygon points="0,-5 12,0 0,5" fill="#0F4C81" stroke="#ffffff" strokeWidth="1" />
+                  </g>
+                ))}
+            </>
+          )}
+        </svg>
+      </div>
+
+      <div className={`map-3d-badge ${directionUnreliable ? 'map-3d-badge-warn' : ''}`}>
+        {directionUnreliable
+          ? `GPS weak ±${accuracyM}m — direction unreliable`
+          : `Live GPS · ${dir || ''} · Direct line`}
+      </div>
+
+      <div className="map-float-actions">
+        <button type="button" className="map-float-btn" onClick={fitBoth}>
+          Fit both pins
+        </button>
+        {onCalibratePin && (
+          <button
+            type="button"
+            className="map-float-btn map-float-btn-accent"
+            onClick={onCalibratePin}
+            title="Agar aap building ke bilkul saamne/andar khade ho to pin yahan set ho jayegi"
+          >
+            Pin yahan set karo
+          </button>
         )}
       </div>
 
-      <div className="map-3d-badge">Live GPS accuracy · Direct line</div>
-
-      <button type="button" className="map-float-btn map-float-single" onClick={fitBoth}>
-        Fit both pins
-      </button>
-
       <div className="map-coord-panel">
+        {directionUnreliable && (
+          <div className="map-gps-warn">
+            GPS accuracy (±{accuracyM} m) distance ({shownDistance} m) se badi hai — isliye{' '}
+            {block.name} galat direction dikh sakta hai. Open sky mein 10–20 sec wait karo, ya
+            building pe khade hokar <strong>Pin yahan set karo</strong> dabao.
+          </div>
+        )}
         <div className="map-coord-row">
           <span className="map-coord-label">Destination</span>
           <span className="map-coord-value">
             {block.name}
+            {dir && !directionUnreliable ? ` · ${dir}` : ''}
             <br />
             <code>
               {fmtCoord(block.lat)}, {fmtCoord(block.lng)}
