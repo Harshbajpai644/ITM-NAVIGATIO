@@ -52,6 +52,7 @@ export default function MapPage() {
   const [pinOverrides, setPinOverrides] = useState(() => loadPinOverrides())
   const [calibrateMsg, setCalibrateMsg] = useState('')
   const [query, setQuery] = useState('')
+  const [showTeachers, setShowTeachers] = useState(false)
 
   const baseBlock = BLOCKS.find((b) => b.id === destId)
 
@@ -147,8 +148,14 @@ export default function MapPage() {
   const chooseDestination = (id) => {
     setArrived(false)
     setCalibrateMsg('')
+    setShowTeachers(false)
     setParams({ dest: id })
   }
+
+  const teachers = useMemo(() => {
+    const list = activeBlock?.people || []
+    return list.filter((p) => (p.name && p.name.trim()) || (p.room && String(p.room).trim()))
+  }, [activeBlock])
 
   if (!destId) {
     return (
@@ -231,20 +238,52 @@ export default function MapPage() {
         <div className="dest-picker-bg" aria-hidden="true" />
         <div className="dest-picker-shade" aria-hidden="true" />
         <div className="dest-picker-inner dest-gps-panel">
-          <Link to="/map" className="dest-back">
+          <Link to="/map" className="dest-back" onClick={() => setShowTeachers(false)}>
             ← Change destination
           </Link>
           <div className="eyebrow">{activeBlock?.name}</div>
           <h1 className="page-title">Turn on live location</h1>
-          <p className="page-sub">
-            Destination:{' '}
-            <code>
-              {activeBlock?.lat.toFixed(6)}, {activeBlock?.lng.toFixed(6)}
-            </code>
-            <br />
+          <p className="page-sub dest-gps-help">
             Enable precise GPS. If the pin looks wrong, stand at the building and use “Set pin here” on
             the map.
           </p>
+
+          {teachers.length > 0 && (
+            <div className="dest-teachers">
+              <div className="dest-teachers-head">
+                <h2>Teachers in this building</h2>
+                <button
+                  type="button"
+                  className="dest-teachers-view"
+                  onClick={() => setShowTeachers((v) => !v)}
+                  aria-expanded={showTeachers}
+                >
+                  {showTeachers ? 'Hide' : 'View'}
+                </button>
+              </div>
+              {showTeachers && (
+                <div className="dest-teachers-table-wrap">
+                  <table className="dest-teachers-table">
+                    <thead>
+                      <tr>
+                        <th scope="col">Name</th>
+                        <th scope="col">Room No</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {teachers.map((p, i) => (
+                        <tr key={`${p.name}-${p.room}-${i}`}>
+                          <td>{p.name?.trim() || p.designation || '—'}</td>
+                          <td>{p.room?.trim() || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
           <button className="btn btn-primary" onClick={enableLocation} disabled={locStatus === 'loading'}>
             {locStatus === 'loading' ? 'Detecting…' : 'Turn on your location'}
           </button>
