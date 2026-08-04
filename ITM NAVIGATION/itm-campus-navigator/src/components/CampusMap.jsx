@@ -2,16 +2,25 @@ import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import Map, { Marker, NavigationControl } from '@vis.gl/react-maplibre'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { CAMPUS_CENTER } from '../data/campusData.js'
-import { shortestCampusRoute } from '../data/campusGraph.js'
-import { haversineM } from '../utils/dijkstra.js'
 
 const MAP_STYLE = 'https://tiles.openfreemap.org/styles/liberty'
+
+function haversineM(a, b) {
+  const R = 6371000
+  const toRad = (d) => (d * Math.PI) / 180
+  const dLat = toRad(b.lat - a.lat)
+  const dLng = toRad(b.lng - a.lng)
+  const x =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x))
+}
 
 function fmtCoord(n) {
   return Number(n).toFixed(6)
 }
 
-/** Project [lng,lat][] → screen px polyline + arrow heads (always visible SVG). */
+/** Project [lng,lat][] → screen px polyline + arrow heads. */
 function useProjectedRoute(mapRef, pathCoords, viewState) {
   const [screen, setScreen] = useState({ line: '', arrows: [] })
 
@@ -34,7 +43,6 @@ function useProjectedRoute(mapRef, pathCoords, viewState) {
           const dy = b.y - a.y
           const len = Math.hypot(dx, dy)
           if (len < 28) continue
-          // one arrow near segment mid
           const t = 0.55
           const x = a.x + dx * t
           const y = a.y + dy * t
@@ -63,65 +71,57 @@ function useProjectedRoute(mapRef, pathCoords, viewState) {
 
 export default function CampusMap({ userPos, block, onArrived }) {
   const mapRef = useRef(null)
-  const lastRoutedPos = useRef(null)
 
   const [viewState, setViewState] = useState({
     longitude: block?.lng ?? CAMPUS_CENTER.lng,
     latitude: block?.lat ?? CAMPUS_CENTER.lat,
-    zoom: 17.5,
+    zoom: 18,
     pitch: 0,
     bearing: 0,
   })
   const [mapTick, setMapTick] = useState(0)
-  const [routeCoords, setRouteCoords] = useState([])
-  const [routeDistanceM, setRouteDistanceM] = useState(null)
-  const [routeMinutes, setRouteMinutes] = useState(null)
-  const [viaNodes, setViaNodes] = useState(0)
 
+  // Exact live GPS ↔ destination distance (no Dijkstra / no hubs)
   const liveDistanceM = useMemo(() => {
     if (!userPos || !block) return null
     return haversineM(userPos, block)
   }, [userPos, block])
 
+  // Straight accurate line: your live coords → destination coords
   const pathCoords = useMemo(() => {
-    if (routeCoords.length > 1) return routeCoords
-    if (userPos && block) {
-      return [
-        [userPos.lng, userPos.lat],
-        [block.lng, block.lat],
-      ]
-    }
-    return []
-  }, [routeCoords, userPos, block])
+    if (!userPos || !block) return []
+    return [
+      [userPos.lng, userPos.lat],
+      [block.lng, block.lat],
+    ]
+  }, [userPos, block])
 
-  // include mapTick so we re-project after map load
   const projected = useProjectedRoute(mapRef, pathCoords, { ...viewState, mapTick })
 
   const fitBoth = useCallback(() => {
     if (!mapRef.current || !userPos || !block) return
     try {
       const map = mapRef.current.getMap()
-      const lngs = pathCoords.length > 1 ? pathCoords.map((c) => c[0]) : [userPos.lng, block.lng]
-      const lats = pathCoords.length > 1 ? pathCoords.map((c) => c[1]) : [userPos.lat, block.lat]
       map.fitBounds(
         [
-          [Math.min(...lngs), Math.min(...lats)],
-          [Math.max(...lngs), Math.max(...lats)],
+          [Math.min(userPos.lng, block.lng), Math.min(userPos.lat, block.lat)],
+          [Math.max(userPos.lng, block.lng), Math.max(userPos.lat, block.lat)],
         ],
-        { padding: 100, duration: 600, maxZoom: 18.5, pitch: 0 }
+        { padding: 100, duration: 600, maxZoom: 19, pitch: 0 }
       )
     } catch (_) {}
-  }, [userPos, block, pathCoords])
+  }, [userPos, block])
 
+  // Keep camera centered between accurate pins
   useEffect(() => {
     if (!userPos || !block) return
     const d = liveDistanceM ?? Infinity
-    if (d < 800) {
+    if (d < 600) {
       setViewState((v) => ({
         ...v,
         longitude: (userPos.lng + block.lng) / 2,
         latitude: (userPos.lat + block.lat) / 2,
-        zoom: Math.max(v.zoom, 17.6),
+        zoom: d < 80 ? 19 : d < 200 ? 18.2 : Math.max(v.zoom, 17.5),
         pitch: 0,
       }))
     } else {
@@ -129,33 +129,9 @@ export default function CampusMap({ userPos, block, onArrived }) {
     }
   }, [userPos, block, liveDistanceM, fitBoth])
 
-  // Dijkstra shortest route
-  useEffect(() => {
-    if (!userPos || !block) return
-    const moved = lastRoutedPos.current ? haversineM(lastRoutedPos.current, userPos) : Infinity
-    if (moved < 12 && lastRoutedPos.current) return
-
-    const route = shortestCampusRoute(userPos, block)
-    if (route?.coords?.length > 1) {
-      setRouteCoords(route.coords)
-      setRouteDistanceM(route.distanceM)
-      setRouteMinutes(route.minutes)
-      setViaNodes(Math.max(0, (route.nodeIds?.length || 0) - 2))
-      lastRoutedPos.current = userPos
-    } else {
-      setRouteCoords([
-        [userPos.lng, userPos.lat],
-        [block.lng, block.lat],
-      ])
-      setRouteDistanceM(liveDistanceM)
-      setRouteMinutes(Math.max(1, Math.round((liveDistanceM || 0) / 80)))
-      setViaNodes(0)
-    }
-  }, [userPos, block, liveDistanceM])
-
   useEffect(() => {
     if (!onArrived || liveDistanceM == null) return
-    if (liveDistanceM < 40) onArrived()
+    if (liveDistanceM < 25) onArrived()
   }, [liveDistanceM, onArrived])
 
   const onMove = useCallback((evt) => {
@@ -168,8 +144,12 @@ export default function CampusMap({ userPos, block, onArrived }) {
 
   if (!userPos || !block) return null
 
-  const shownDistance = Math.round(routeDistanceM ?? liveDistanceM ?? 0)
-  const shownMinutes = routeMinutes ?? Math.max(1, Math.round(shownDistance / 80))
+  const shownDistance = Math.round(liveDistanceM ?? 0)
+  const shownMinutes = Math.max(1, Math.round(shownDistance / 80))
+  const accuracyM =
+    userPos.accuracy != null && Number.isFinite(userPos.accuracy)
+      ? Math.round(userPos.accuracy)
+      : null
 
   return (
     <div className="map-card map-card-full" style={{ position: 'relative' }}>
@@ -208,16 +188,16 @@ export default function CampusMap({ userPos, block, onArrived }) {
                 <span className="you-avatar-leg you-avatar-leg-r" />
               </div>
               <div className="you-avatar-label">
-                <strong>You</strong>
+                <strong>You (live)</strong>
                 <span>
                   {fmtCoord(userPos.lat)}, {fmtCoord(userPos.lng)}
                 </span>
+                {accuracyM != null && <span>±{accuracyM} m</span>}
               </div>
             </div>
           </Marker>
         </Map>
 
-        {/* Solid path drawn in SVG on top of map — always visible */}
         {projected.line && (
           <svg className="route-svg-overlay" aria-hidden="true">
             <polyline
@@ -246,7 +226,7 @@ export default function CampusMap({ userPos, block, onArrived }) {
         )}
       </div>
 
-      <div className="map-3d-badge">Dijkstra shortest · Solid path · Arrows</div>
+      <div className="map-3d-badge">Live GPS accuracy · Direct line</div>
 
       <button type="button" className="map-float-btn map-float-single" onClick={fitBoth}>
         Fit both pins
@@ -269,17 +249,19 @@ export default function CampusMap({ userPos, block, onArrived }) {
             <code>
               {fmtCoord(userPos.lat)}, {fmtCoord(userPos.lng)}
             </code>
+            {accuracyM != null && (
+              <>
+                <br />
+                <span className="map-coord-mins">GPS accuracy ±{accuracyM} m</span>
+              </>
+            )}
           </span>
         </div>
         <div className="map-coord-row map-coord-dist">
-          <span className="map-coord-label">Shortest route</span>
+          <span className="map-coord-label">Distance now</span>
           <span className="map-coord-value">
             <strong>{shownDistance} m</strong>
-            <span className="map-coord-mins">
-              {' '}
-              · ~{shownMinutes} min
-              {viaNodes > 0 ? ` · via ${viaNodes} hubs` : ''}
-            </span>
+            <span className="map-coord-mins"> · ~{shownMinutes} min walk</span>
           </span>
         </div>
       </div>

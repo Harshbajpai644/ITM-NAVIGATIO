@@ -3,6 +3,12 @@ import { useSearchParams, Link } from 'react-router-dom'
 import CampusMap from '../components/CampusMap.jsx'
 import { BLOCKS } from '../data/campusData.js'
 
+const GPS_OPTS = {
+  enableHighAccuracy: true,
+  maximumAge: 1000,
+  timeout: 20000,
+}
+
 export default function MapPage() {
   const [params, setParams] = useSearchParams()
   const destId = params.get('dest') || ''
@@ -17,17 +23,30 @@ export default function MapPage() {
   useEffect(() => {
     if (locStatus !== 'granted') return
     const watchId = navigator.geolocation.watchPosition(
-      (pos) =>
-        setUserPos({
+      (pos) => {
+        // Prefer more accurate fixes; ignore very poor readings when we already have better
+        const next = {
           lat: pos.coords.latitude,
           lng: pos.coords.longitude,
           accuracy: pos.coords.accuracy,
-        }),
+        }
+        setUserPos((prev) => {
+          if (
+            prev?.accuracy != null &&
+            next.accuracy != null &&
+            next.accuracy > prev.accuracy + 25 &&
+            next.accuracy > 40
+          ) {
+            return prev
+          }
+          return next
+        })
+      },
       () => {
         setLocStatus('error')
-        setErrorMsg('Location error. GPS on hai?')
+        setErrorMsg('Location error. GPS on hai? Phone pe High Accuracy / Precise location on karo.')
       },
-      { enableHighAccuracy: true, maximumAge: 2000, timeout: 15000 }
+      GPS_OPTS
     )
     return () => navigator.geolocation.clearWatch(watchId)
   }, [locStatus])
@@ -50,9 +69,9 @@ export default function MapPage() {
       },
       () => {
         setLocStatus('error')
-        setErrorMsg('Location allow karo (https / localhost).')
+        setErrorMsg('Location allow karo (https / localhost). Phone settings mein Precise location ON.')
       },
-      { enableHighAccuracy: true, timeout: 12000 }
+      GPS_OPTS
     )
   }
 
@@ -63,7 +82,7 @@ export default function MapPage() {
       <div className="page page-narrow">
         <div className="eyebrow">Navigate</div>
         <h1 className="page-title">Building search</h1>
-        <p className="page-sub">Building choose karo — uske coordinates + aapki live GPS dikhengi.</p>
+        <p className="page-sub">Building choose karo — uske exact coordinates + aapki live GPS dikhengi.</p>
         <div className="field">
           <select
             className="select-input"
@@ -95,7 +114,7 @@ export default function MapPage() {
             {activeBlock?.lat.toFixed(6)}, {activeBlock?.lng.toFixed(6)}
           </code>
           <br />
-          Ab apni live GPS on karo — dono match karke distance milega.
+          Live GPS on karo — exact location + real distance dikhega (Dijkstra nahi).
         </p>
         <button className="btn btn-primary" onClick={enableLocation} disabled={locStatus === 'loading'}>
           {locStatus === 'loading' ? 'Detecting...' : 'Turn On Your Location'}
