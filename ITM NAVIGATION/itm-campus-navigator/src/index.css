@@ -108,7 +108,9 @@ a{ color:inherit; }
   height:auto;
   display:block;
   object-fit:contain;
-  filter:drop-shadow(0 1px 8px rgba(255,255,255,0.75));
+  /* Remove white box around ITM logo on campus photo */
+  mix-blend-mode:multiply;
+  filter:drop-shadow(0 1px 8px rgba(255,255,255,0.35));
 }
 
 .walk-landing-main{
