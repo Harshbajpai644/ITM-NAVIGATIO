@@ -17,12 +17,14 @@ export default function Home() {
 
       <div className="walk-landing-content">
         <header className="walk-landing-top">
-          <div className="walk-landing-logo">
-            <span className="walk-landing-logo-mark">ITM</span>
-            <span className="walk-landing-logo-text">
-              UNIVERSITY
-              <small>GWALIOR</small>
-            </span>
+          <div className="walk-landing-logo" aria-label="ITM University Gwalior">
+            <img
+              className="walk-landing-logo-img"
+              src="/itm-logo.svg"
+              alt="ITM University Gwalior — Celebrating Dreams"
+              width="160"
+              height="105"
+            />
           </div>
         </header>
 

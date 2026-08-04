@@ -97,40 +97,13 @@ a{ color:inherit; }
 .walk-landing-logo{
   display:inline-flex;
   align-items:center;
-  gap:10px;
 }
-.walk-landing-logo-mark{
-  font-family:'Space Grotesk', sans-serif;
-  font-weight:700;
-  font-size:18px;
-  letter-spacing:0.08em;
-  color:#fff;
-  background:var(--primary);
-  padding:8px 10px 7px;
-  border-radius:4px;
-  line-height:1;
-  /* striped ITM mark feel */
-  background-image:repeating-linear-gradient(
-    0deg,
-    transparent 0 3px,
-    rgba(255,255,255,0.18) 3px 4px
-  ), linear-gradient(180deg, #0d4578, var(--primary));
-}
-.walk-landing-logo-text{
-  font-family:'Space Grotesk', sans-serif;
-  font-weight:700;
-  font-size:11px;
-  letter-spacing:0.14em;
-  line-height:1.15;
+.walk-landing-logo-img{
+  width:min(42vw, 148px);
+  height:auto;
   color:var(--primary);
-}
-.walk-landing-logo-text small{
-  display:block;
-  font-family:'IBM Plex Mono', monospace;
-  font-size:9px;
-  font-weight:600;
-  letter-spacing:0.16em;
-  color:var(--slate);
+  /* SVG uses currentColor — ensure readable on bright campus photo */
+  filter:drop-shadow(0 1px 0 rgba(255,255,255,0.65));
 }
 
 .walk-landing-main{
@@ -294,7 +267,9 @@ a{ color:inherit; }
     justify-content:flex-start;
     padding:0;
   }
-  .walk-cta{ min-width:260px; }
+  .walk-landing-logo-img{
+    width:168px;
+  }
 }
 
 @media (max-width: 899px){
