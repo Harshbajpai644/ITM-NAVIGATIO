@@ -1,0 +1,10 @@
+# Netlify: app lives inside nested Vite project
+[build]
+  base = "ITM NAVIGATION/itm-campus-navigator"
+  command = "npm run build"
+  publish = "dist"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
