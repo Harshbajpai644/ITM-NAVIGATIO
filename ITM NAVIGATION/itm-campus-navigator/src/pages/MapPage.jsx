@@ -142,17 +142,20 @@ export default function MapPage() {
 
   const calibratePin = useCallback(() => {
     if (!userPos || !activeBlock) return
-    if (userPos.accuracy != null && userPos.accuracy > 35) {
+    // Allow pin even when weak, but warn — campus indoor GPS is often poor
+    if (userPos.accuracy != null && userPos.accuracy > 50) {
       setCalibrateMsg(
-        `GPS accuracy is ±${Math.round(userPos.accuracy)} m. Wait in open sky until it is better than ±35 m, then set the pin.`
+        `GPS still weak (±${Math.round(userPos.accuracy)} m). Wait in open sky near the entrance, then tap Set pin here again.`
       )
       return
     }
     const next = savePinOverride(activeBlock.id, userPos.lat, userPos.lng)
     setPinOverrides(next)
-    setCalibrateMsg(
-      `${activeBlock.name} pin updated: ${userPos.lat.toFixed(6)}, ${userPos.lng.toFixed(6)}`
-    )
+    const line = `${activeBlock.id}: ${userPos.lat.toFixed(6)}, ${userPos.lng.toFixed(6)}`
+    setCalibrateMsg(`${activeBlock.name} pin saved. Send this to update code: ${line}`)
+    try {
+      navigator.clipboard?.writeText?.(line)
+    } catch (_) {}
   }, [userPos, activeBlock])
 
   const chooseDestination = (id) => {

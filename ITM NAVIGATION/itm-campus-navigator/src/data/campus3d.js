@@ -1,10 +1,14 @@
 import { CAMPUS_CENTER } from './campusData.js'
 
 /**
- * Exact campus look = real satellite imagery of ITM Gwalior
- * (same ground truth as Google Maps satellite — track, field, buildings, NH-44).
- * Fake extruded boxes are intentionally not used; they never match real footprints.
+ * Real ITM Gwalior satellite (Esri World Imagery).
+ * This campus only has sharp tiles up to ~z17; higher zoom returns
+ * Esri's "Map data not yet available" placeholder — so source maxzoom is 17
+ * and MapLibre overscales those tiles instead of fetching blank ones.
  */
+export const CAMPUS_MAX_ZOOM = 18
+export const CAMPUS_TILE_MAX_ZOOM = 17
+
 export const CAMPUS_SATELLITE_STYLE = {
   version: 8,
   name: 'ITM Campus Satellite',
@@ -17,9 +21,8 @@ export const CAMPUS_SATELLITE_STYLE = {
       ],
       tileSize: 256,
       attribution: 'Tiles © Esri — World Imagery',
-      maxzoom: 19,
+      maxzoom: CAMPUS_TILE_MAX_ZOOM,
     },
-    // Light labels overlay so road names stay readable on dark satellite
     labels: {
       type: 'raster',
       tiles: [
@@ -27,7 +30,7 @@ export const CAMPUS_SATELLITE_STYLE = {
       ],
       tileSize: 256,
       attribution: 'Labels © Esri',
-      maxzoom: 19,
+      maxzoom: CAMPUS_TILE_MAX_ZOOM,
     },
   },
   layers: [
@@ -44,23 +47,16 @@ export const CAMPUS_SATELLITE_STYLE = {
       source: 'labels',
       minzoom: 0,
       maxzoom: 22,
-      paint: { 'raster-opacity': 0.85 },
+      paint: { 'raster-opacity': 0.8 },
     },
   ],
 }
 
-/** Framed like the Google Maps campus screenshot (track + university + highway). */
+/** Overview framing: track + university + highway (like Google campus view). */
 export const CAMPUS_OVERVIEW_CAMERA = {
   longitude: CAMPUS_CENTER.lng,
   latitude: 26.1376,
   zoom: 15.7,
   pitch: 0,
   bearing: 0,
-}
-
-/** Closer nav view while walking — still real satellite, slight tilt optional. */
-export const CAMPUS_NAV_CAMERA = {
-  pitch: 0,
-  bearing: 0,
-  maxZoom: 19,
 }

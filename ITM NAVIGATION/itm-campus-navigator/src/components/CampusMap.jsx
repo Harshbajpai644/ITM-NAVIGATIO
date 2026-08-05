@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import Map, { Marker, NavigationControl } from '@vis.gl/react-maplibre'
 import 'maplibre-gl/dist/maplibre-gl.css'
-import { CAMPUS_SATELLITE_STYLE, CAMPUS_OVERVIEW_CAMERA } from '../data/campus3d.js'
+import { CAMPUS_SATELLITE_STYLE, CAMPUS_OVERVIEW_CAMERA, CAMPUS_MAX_ZOOM } from '../data/campus3d.js'
 
 function haversineM(a, b) {
   const R = 6371000
@@ -103,7 +103,7 @@ export default function CampusMap({ userPos, block, onArrived, onCalibratePin })
   const [viewState, setViewState] = useState({
     longitude: block?.lng ?? CAMPUS_OVERVIEW_CAMERA.longitude,
     latitude: block?.lat ?? CAMPUS_OVERVIEW_CAMERA.latitude,
-    zoom: 17.2,
+    zoom: 16.8,
     pitch: 0,
     bearing: 0,
   })
@@ -160,7 +160,7 @@ export default function CampusMap({ userPos, block, onArrived, onCalibratePin })
             Math.max(userPos.lat, block.lat) + padAcc,
           ],
         ],
-        { padding: 100, duration: 700, maxZoom: 19, pitch: 0, bearing: 0 }
+        { padding: 100, duration: 700, maxZoom: 17.5, pitch: 0, bearing: 0 }
       )
     } catch (_) {}
   }, [userPos, block, accuracyM])
@@ -173,7 +173,8 @@ export default function CampusMap({ userPos, block, onArrived, onCalibratePin })
         ...v,
         longitude: (userPos.lng + block.lng) / 2,
         latitude: (userPos.lat + block.lat) / 2,
-        zoom: d < 80 ? 18.8 : d < 200 ? 18 : Math.max(v.zoom, 17.2),
+        // Keep within Esri tile coverage for this campus (avoid blank "not available")
+        zoom: d < 80 ? 17.6 : d < 200 ? 17.2 : Math.min(Math.max(v.zoom, 16.6), 17.4),
         pitch: 0,
         bearing: 0,
       }))
@@ -211,6 +212,7 @@ export default function CampusMap({ userPos, block, onArrived, onCalibratePin })
           onLoad={onLoad}
           mapStyle={CAMPUS_SATELLITE_STYLE}
           style={{ width: '100%', height: '100%' }}
+          maxZoom={CAMPUS_MAX_ZOOM}
           maxPitch={60}
           attributionControl
         >
