@@ -75,7 +75,7 @@ export default function CampusMap({ userPos, block, onArrived, onCalibratePin })
   const [viewState, setViewState] = useState({
     longitude: block?.lng ?? CAMPUS_OVERVIEW_CAMERA.longitude,
     latitude: block?.lat ?? CAMPUS_OVERVIEW_CAMERA.latitude,
-    zoom: 15.8,
+    zoom: 16.8,
     pitch: 0,
     bearing: 0,
   })
@@ -128,7 +128,12 @@ export default function CampusMap({ userPos, block, onArrived, onCalibratePin })
         ...v,
         longitude: (userPos.lng + block.lng) / 2,
         latitude: (userPos.lat + block.lat) / 2,
-        zoom: d < 100 ? 16 : d < 250 ? 15.6 : Math.min(Math.max(v.zoom, 15.2), CAMPUS_MAX_ZOOM),
+        zoom:
+          d < 100
+            ? 17.2
+            : d < 250
+              ? 16.8
+              : Math.min(Math.max(v.zoom, 16.2), CAMPUS_MAX_ZOOM),
         pitch: 0,
         bearing: 0,
       }))
