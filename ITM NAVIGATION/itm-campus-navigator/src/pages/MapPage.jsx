@@ -288,6 +288,7 @@ export default function MapPage() {
                   <table className="dest-teachers-table">
                     <thead>
                       <tr>
+                        <th scope="col">Floor</th>
                         <th scope="col">Name</th>
                         <th scope="col">Room No</th>
                       </tr>
@@ -295,6 +296,7 @@ export default function MapPage() {
                     <tbody>
                       {teachers.map((p, i) => (
                         <tr key={`${p.name}-${p.room}-${i}`}>
+                          <td>{p.floor?.trim() || '—'}</td>
                           <td>{p.name?.trim() || p.designation || '—'}</td>
                           <td>{p.room?.trim() || '—'}</td>
                         </tr>
