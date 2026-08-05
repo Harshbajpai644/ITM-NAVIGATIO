@@ -103,11 +103,12 @@ export default function CampusMap({ userPos, block, onArrived, onCalibratePin })
   const [viewState, setViewState] = useState({
     longitude: block?.lng ?? CAMPUS_OVERVIEW_CAMERA.longitude,
     latitude: block?.lat ?? CAMPUS_OVERVIEW_CAMERA.latitude,
-    zoom: 16.8,
+    zoom: 16.2,
     pitch: 0,
     bearing: 0,
   })
   const [mapTick, setMapTick] = useState(0)
+  const [useSatellite, setUseSatellite] = useState(true)
 
   const liveDistanceM = useMemo(() => {
     if (!userPos || !block) return null
@@ -160,7 +161,7 @@ export default function CampusMap({ userPos, block, onArrived, onCalibratePin })
             Math.max(userPos.lat, block.lat) + padAcc,
           ],
         ],
-        { padding: 100, duration: 700, maxZoom: 17.5, pitch: 0, bearing: 0 }
+        { padding: 110, duration: 700, maxZoom: 16.8, pitch: 0, bearing: 0 }
       )
     } catch (_) {}
   }, [userPos, block, accuracyM])
@@ -173,8 +174,8 @@ export default function CampusMap({ userPos, block, onArrived, onCalibratePin })
         ...v,
         longitude: (userPos.lng + block.lng) / 2,
         latitude: (userPos.lat + block.lat) / 2,
-        // Keep within Esri tile coverage for this campus (avoid blank "not available")
-        zoom: d < 80 ? 17.6 : d < 200 ? 17.2 : Math.min(Math.max(v.zoom, 16.6), 17.4),
+        // Stay at/under Esri real-tile zoom for this campus
+        zoom: d < 100 ? 16.8 : d < 250 ? 16.4 : Math.min(Math.max(v.zoom, 15.8), 16.5),
         pitch: 0,
         bearing: 0,
       }))
@@ -195,6 +196,14 @@ export default function CampusMap({ userPos, block, onArrived, onCalibratePin })
   const onLoad = useCallback(() => {
     setMapTick((t) => t + 1)
   }, [])
+
+  useEffect(() => {
+    const map = mapRef.current?.getMap?.()
+    if (!map?.getLayer?.('satellite')) return
+    try {
+      map.setPaintProperty('satellite', 'raster-opacity', useSatellite ? 1 : 0)
+    } catch (_) {}
+  }, [useSatellite, mapTick])
 
   if (!userPos || !block) return null
 
@@ -292,10 +301,19 @@ export default function CampusMap({ userPos, block, onArrived, onCalibratePin })
       <div className={`map-3d-badge ${directionUnreliable ? 'map-3d-badge-warn' : ''}`}>
         {directionUnreliable
           ? `GPS weak ±${accuracyM}m — direction unreliable`
-          : `Campus satellite · Live GPS · ${dir || ''}`}
+          : useSatellite
+            ? `Campus satellite · Live GPS · ${dir || ''}`
+            : `Streets map · Live GPS · ${dir || ''}`}
       </div>
 
       <div className="map-float-actions">
+        <button
+          type="button"
+          className="map-float-btn"
+          onClick={() => setUseSatellite((v) => !v)}
+        >
+          {useSatellite ? 'Streets map' : 'Satellite'}
+        </button>
         <button type="button" className="map-float-btn" onClick={fitBoth}>
           Fit both pins
         </button>
