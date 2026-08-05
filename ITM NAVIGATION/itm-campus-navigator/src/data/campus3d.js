@@ -8,10 +8,10 @@ import { CAMPUS_CENTER } from './campusData.js'
  *   "Map data not yet available" placeholders (common on this campus).
  */
 /**
- * Max zoom 17.2 — MapLibre overscales Esri z16 tiles so buildings
- * look closer without requesting blank higher-zoom imagery.
+ * Cap at Esri native tile zoom (16). Going higher overscales
+ * imagery and looks blurry/pixelated on this campus.
  */
-export const CAMPUS_MAX_ZOOM = 17.2
+export const CAMPUS_MAX_ZOOM = 16
 export const CAMPUS_MIN_ZOOM = 14.5
 export const CAMPUS_TILE_MAX_ZOOM = 16
 
@@ -59,7 +59,7 @@ export const CAMPUS_SATELLITE_STYLE = {
 export const CAMPUS_OVERVIEW_CAMERA = {
   longitude: CAMPUS_CENTER.lng,
   latitude: 26.1376,
-  zoom: 16.4,
+  zoom: 15.8,
   pitch: 0,
   bearing: 0,
 }
