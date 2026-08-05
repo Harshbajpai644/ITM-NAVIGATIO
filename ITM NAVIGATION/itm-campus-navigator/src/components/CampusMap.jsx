@@ -7,6 +7,13 @@ import {
   CAMPUS_MAX_ZOOM,
   CAMPUS_MIN_ZOOM,
 } from '../data/campus3d.js'
+import {
+  AMENITIES,
+  AMENITY_META,
+  LAYER_DEFS,
+  buildingKind,
+  isAmenityBuilding,
+} from '../data/mapLayers.js'
 
 function haversineM(a, b) {
   const R = 6371000
@@ -41,10 +48,9 @@ function useProjectedRoute(mapRef, pathCoords, viewState) {
           const dy = b.y - a.y
           const len = Math.hypot(dx, dy)
           if (len < 28) continue
-          const t = 0.55
           arrows.push({
-            x: a.x + dx * t,
-            y: a.y + dy * t,
+            x: a.x + dx * 0.55,
+            y: a.y + dy * 0.55,
             ang: (Math.atan2(dy, dx) * 180) / Math.PI,
             key: `${i}-${Math.round(a.x)}`,
           })
@@ -69,91 +75,140 @@ function useProjectedRoute(mapRef, pathCoords, viewState) {
   return screen
 }
 
-export default function CampusMap({ userPos, block, onArrived, onCalibratePin }) {
-  const mapRef = useRef(null)
+function MarkerIcon({ kind, label, active, compact, onClick }) {
+  const meta = AMENITY_META[kind]
+  const short =
+    kind === 'building' || kind === 'library' || kind === 'hostel'
+      ? 'B'
+      : kind === 'teacher'
+        ? 'T'
+        : meta?.short || '•'
+  const color =
+    kind === 'teacher'
+      ? '#0B3760'
+      : kind === 'building' || kind === 'library' || kind === 'hostel'
+        ? '#00C2A8'
+        : meta?.color || '#0F4C81'
 
+  return (
+    <button
+      type="button"
+      className={`map-marker ${compact ? 'map-marker-sm' : ''} ${active ? 'is-active' : ''}`}
+      style={{ '--marker-color': color }}
+      aria-label={label}
+      onClick={(e) => {
+        e.stopPropagation()
+        onClick?.(e)
+      }}
+    >
+      <span className="map-marker-dot">{short}</span>
+      {!compact && <span className="map-marker-name">{label}</span>}
+    </button>
+  )
+}
+
+export default function CampusMap({
+  buildings = [],
+  teachers = [],
+  layers,
+  userPos,
+  dest,
+  selected,
+  onSelect,
+  onNavigate,
+  focusTarget,
+  onCalibratePin,
+  searchingTeachers = false,
+}) {
+  const mapRef = useRef(null)
   const [viewState, setViewState] = useState({
-    longitude: block?.lng ?? CAMPUS_OVERVIEW_CAMERA.longitude,
-    latitude: block?.lat ?? CAMPUS_OVERVIEW_CAMERA.latitude,
-    zoom: 16,
+    longitude: CAMPUS_OVERVIEW_CAMERA.longitude,
+    latitude: CAMPUS_OVERVIEW_CAMERA.latitude,
+    zoom: CAMPUS_OVERVIEW_CAMERA.zoom,
     pitch: 0,
     bearing: 0,
   })
   const [mapTick, setMapTick] = useState(0)
-  const [useSatellite, setUseSatellite] = useState(true)
+  const [useSatellite, setUseSatellite] = useState(false)
+  const [layersOpen, setLayersOpen] = useState(false)
+  const [localLayers, setLocalLayers] = useState(layers)
+
+  useEffect(() => {
+    setLocalLayers(layers)
+  }, [layers])
 
   const liveDistanceM = useMemo(() => {
-    if (!userPos || !block) return null
-    return haversineM(userPos, block)
-  }, [userPos, block])
+    if (!userPos || !dest) return null
+    return haversineM(userPos, dest)
+  }, [userPos, dest])
 
   const pathCoords = useMemo(() => {
-    if (!userPos || !block) return []
+    if (!userPos || !dest) return []
     return [
       [userPos.lng, userPos.lat],
-      [block.lng, block.lat],
+      [dest.lng, dest.lat],
     ]
-  }, [userPos, block])
+  }, [userPos, dest])
 
   const accuracyM =
     userPos?.accuracy != null && Number.isFinite(userPos.accuracy)
       ? Math.round(userPos.accuracy)
       : null
 
-  // Direction unreliable when GPS circle is bigger than (or close to) distance
   const directionUnreliable =
     accuracyM != null && liveDistanceM != null && accuracyM >= Math.max(25, liveDistanceM * 0.8)
 
   const projected = useProjectedRoute(mapRef, pathCoords, { ...viewState, mapTick })
 
+  const flyTo = useCallback((lat, lng, zoom = 16) => {
+    setViewState((v) => ({
+      ...v,
+      latitude: lat,
+      longitude: lng,
+      zoom: Math.min(zoom, CAMPUS_MAX_ZOOM),
+      pitch: 0,
+      bearing: 0,
+    }))
+  }, [])
+
+  useEffect(() => {
+    if (!focusTarget?.lat) return
+    flyTo(focusTarget.lat, focusTarget.lng, 16)
+  }, [focusTarget, flyTo])
+
   const fitBoth = useCallback(() => {
-    if (!mapRef.current || !userPos || !block) return
+    if (!mapRef.current || !userPos || !dest) return
     try {
       const map = mapRef.current.getMap()
       map.fitBounds(
         [
-          [Math.min(userPos.lng, block.lng), Math.min(userPos.lat, block.lat)],
-          [Math.max(userPos.lng, block.lng), Math.max(userPos.lat, block.lat)],
+          [Math.min(userPos.lng, dest.lng), Math.min(userPos.lat, dest.lat)],
+          [Math.max(userPos.lng, dest.lng), Math.max(userPos.lat, dest.lat)],
         ],
-        { padding: 110, duration: 700, maxZoom: CAMPUS_MAX_ZOOM, pitch: 0, bearing: 0 }
+        { padding: 100, duration: 700, maxZoom: CAMPUS_MAX_ZOOM, pitch: 0, bearing: 0 }
       )
     } catch (_) {}
-  }, [userPos, block])
+  }, [userPos, dest])
 
   useEffect(() => {
-    if (!userPos || !block) return
+    if (!userPos || !dest) return
     const d = liveDistanceM ?? Infinity
     if (d < 600) {
       setViewState((v) => ({
         ...v,
-        longitude: (userPos.lng + block.lng) / 2,
-        latitude: (userPos.lat + block.lat) / 2,
-        zoom:
-          d < 100
-            ? 16
-            : d < 250
-              ? 15.7
-              : Math.min(Math.max(v.zoom, 15.4), CAMPUS_MAX_ZOOM),
+        longitude: (userPos.lng + dest.lng) / 2,
+        latitude: (userPos.lat + dest.lat) / 2,
+        zoom: d < 100 ? 16 : d < 250 ? 15.7 : Math.min(Math.max(v.zoom, 15.4), CAMPUS_MAX_ZOOM),
         pitch: 0,
         bearing: 0,
       }))
     } else {
       fitBoth()
     }
-  }, [userPos, block, liveDistanceM, fitBoth])
+  }, [dest?.id, userPos?.lat, userPos?.lng]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => {
-    if (!onArrived || liveDistanceM == null || directionUnreliable) return
-    if (liveDistanceM < 20) onArrived()
-  }, [liveDistanceM, onArrived, directionUnreliable])
-
-  const onMove = useCallback((evt) => {
-    setViewState(evt.viewState)
-  }, [])
-
-  const onLoad = useCallback(() => {
-    setMapTick((t) => t + 1)
-  }, [])
+  const onMove = useCallback((evt) => setViewState(evt.viewState), [])
+  const onLoad = useCallback(() => setMapTick((t) => t + 1), [])
 
   useEffect(() => {
     const map = mapRef.current?.getMap?.()
@@ -163,14 +218,46 @@ export default function CampusMap({ userPos, block, onArrived, onCalibratePin })
     } catch (_) {}
   }, [useSatellite, mapTick])
 
-  if (!userPos || !block) return null
+  const toggleLayer = (id) => {
+    setLocalLayers((prev) => ({ ...prev, [id]: !prev[id] }))
+  }
 
-  const shownDistance = Math.round(liveDistanceM ?? 0)
-  const shownMinutes = Math.max(1, Math.round(shownDistance / 80))
+  const showBuildings = localLayers.buildings !== false
+  const showTeachers = localLayers.teachers === true || searchingTeachers
+  const showAmenities = localLayers.amenities !== false
+
+  const buildingMarkers = useMemo(() => {
+    if (!showBuildings) return []
+    return buildings.filter((b) => !isAmenityBuilding(b))
+  }, [buildings, showBuildings])
+
+  const amenityFromBuildings = useMemo(() => {
+    if (!showAmenities) return []
+    return buildings.filter((b) => isAmenityBuilding(b))
+  }, [buildings, showAmenities])
+
+  const amenityMarkers = showAmenities ? AMENITIES : []
+
+  const teacherMarkers = useMemo(() => {
+    if (!showTeachers) return []
+    // Avoid MG clutter: if many teachers, show when zoomed or searching
+    if (searchingTeachers) return teachers
+    if (viewState.zoom < 15.6) return []
+    return teachers
+  }, [showTeachers, teachers, searchingTeachers, viewState.zoom])
+
+  const shownDistance = liveDistanceM != null ? Math.round(liveDistanceM) : null
+  const shownMinutes =
+    shownDistance != null ? Math.max(1, Math.round(shownDistance / 80)) : null
   const lineColor = directionUnreliable ? '#94a3b8' : '#00C2A8'
 
+  const selectPlace = (place) => {
+    onSelect?.(place)
+    flyTo(place.lat, place.lng, 16)
+  }
+
   return (
-    <div className="map-card map-card-full" style={{ position: 'relative' }}>
+    <div className="map-card map-card-full map-explorer" style={{ position: 'relative' }}>
       <div className="maplibre-3d-full" style={{ position: 'relative' }}>
         <Map
           ref={mapRef}
@@ -183,30 +270,122 @@ export default function CampusMap({ userPos, block, onArrived, onCalibratePin })
           maxZoom={CAMPUS_MAX_ZOOM}
           maxPitch={60}
           attributionControl={false}
+          onClick={() => onSelect?.(null)}
         >
-          <Marker longitude={block.lng} latitude={block.lat} anchor="bottom">
-            <div className="coord-pin dest-pin">
-              <div className="coord-pin-title">{block.name}</div>
-            </div>
-          </Marker>
+          {buildingMarkers.map((b) => (
+            <Marker key={b.id} longitude={b.lng} latitude={b.lat} anchor="bottom">
+              <MarkerIcon
+                kind={buildingKind(b)}
+                label={b.name}
+                active={selected?.id === b.id || dest?.id === b.id}
+                onClick={() =>
+                  selectPlace({
+                    id: b.id,
+                    type: 'building',
+                    kind: buildingKind(b),
+                    name: b.name,
+                    subtitle: b.category,
+                    hours: b.hours,
+                    lat: b.lat,
+                    lng: b.lng,
+                    blockId: b.id,
+                  })
+                }
+              />
+            </Marker>
+          ))}
 
-          <Marker longitude={userPos.lng} latitude={userPos.lat} anchor="bottom">
-            <div className="you-avatar" aria-label="You live location">
-              <div className="you-avatar-pulse" />
-              <div className="you-avatar-figure">
-                <span className="you-avatar-hair" />
-                <span className="you-avatar-head" />
-                <span className="you-avatar-torso" />
-                <span className="you-avatar-arm you-avatar-arm-l" />
-                <span className="you-avatar-arm you-avatar-arm-r" />
-                <span className="you-avatar-leg you-avatar-leg-l" />
-                <span className="you-avatar-leg you-avatar-leg-r" />
+          {amenityFromBuildings.map((b) => (
+            <Marker key={`ab-${b.id}`} longitude={b.lng} latitude={b.lat} anchor="bottom">
+              <MarkerIcon
+                kind={buildingKind(b)}
+                label={b.name}
+                active={selected?.id === b.id}
+                compact
+                onClick={() =>
+                  selectPlace({
+                    id: b.id,
+                    type: 'amenity',
+                    kind: buildingKind(b),
+                    name: b.name,
+                    subtitle: b.category,
+                    hours: b.hours,
+                    lat: b.lat,
+                    lng: b.lng,
+                    blockId: b.id,
+                  })
+                }
+              />
+            </Marker>
+          ))}
+
+          {amenityMarkers.map((a) => (
+            <Marker key={a.id} longitude={a.lng} latitude={a.lat} anchor="bottom">
+              <MarkerIcon
+                kind={a.kind}
+                label={a.name}
+                active={selected?.id === a.id}
+                compact
+                onClick={() =>
+                  selectPlace({
+                    id: a.id,
+                    type: 'amenity',
+                    kind: a.kind,
+                    name: a.name,
+                    subtitle: a.hint,
+                    hours: a.hours,
+                    lat: a.lat,
+                    lng: a.lng,
+                  })
+                }
+              />
+            </Marker>
+          ))}
+
+          {teacherMarkers.map((t) => (
+            <Marker key={t.id} longitude={t.lng} latitude={t.lat} anchor="bottom">
+              <MarkerIcon
+                kind="teacher"
+                label={t.name}
+                active={selected?.id === t.id}
+                compact
+                onClick={() =>
+                  selectPlace({
+                    id: t.id,
+                    type: 'teacher',
+                    kind: 'teacher',
+                    name: t.name,
+                    subtitle: t.designation,
+                    hours: t.hours,
+                    lat: t.lat,
+                    lng: t.lng,
+                    blockId: t.blockId,
+                    blockName: t.blockName,
+                    room: t.room,
+                    floor: t.floor,
+                    designation: t.designation,
+                  })
+                }
+              />
+            </Marker>
+          ))}
+
+          {dest && (
+            <Marker longitude={dest.lng} latitude={dest.lat} anchor="bottom">
+              <div className="coord-pin dest-pin">
+                <div className="coord-pin-title">{dest.name}</div>
               </div>
-              <div className="you-avatar-label">
-                <strong>You</strong>
+            </Marker>
+          )}
+
+          {userPos && (
+            <Marker longitude={userPos.lng} latitude={userPos.lat} anchor="center">
+              <div className="you-dot" aria-label="You live location">
+                <span className="you-dot-pulse" />
+                <span className="you-dot-core" />
               </div>
-            </div>
-          </Marker>
+            </Marker>
+          )}
         </Map>
 
         <svg className="route-svg-overlay" aria-hidden="true">
@@ -242,32 +421,93 @@ export default function CampusMap({ userPos, block, onArrived, onCalibratePin })
       </div>
 
       <div className="map-float-actions">
-        <button
-          type="button"
-          className="map-float-btn"
-          onClick={() => setUseSatellite((v) => !v)}
-        >
+        <button type="button" className="map-float-btn" onClick={() => setLayersOpen((v) => !v)}>
+          {layersOpen ? 'Close layers' : 'Layers'}
+        </button>
+        <button type="button" className="map-float-btn" onClick={() => setUseSatellite((v) => !v)}>
           {useSatellite ? 'Streets map' : 'Satellite'}
         </button>
-        <button type="button" className="map-float-btn" onClick={fitBoth}>
-          Fit both
-        </button>
-        {onCalibratePin && (
+        {userPos && dest && (
+          <button type="button" className="map-float-btn" onClick={fitBoth}>
+            Fit both
+          </button>
+        )}
+        {onCalibratePin && dest && (
           <button
             type="button"
             className="map-float-btn map-float-btn-accent"
             onClick={onCalibratePin}
-            title="Stand at the building entrance, then set the pin to your current GPS position"
           >
             Set pin here
           </button>
         )}
       </div>
 
-      <div className="map-dist-chip">
-        <strong>{shownDistance} m</strong>
-        <span>· ~{shownMinutes} min</span>
-      </div>
+      {layersOpen && (
+        <div className="map-layers-panel" role="dialog" aria-label="Map layers">
+          <strong>Map layers</strong>
+          {LAYER_DEFS.map((l) => (
+            <label key={l.id} className="map-layer-row">
+              <input
+                type="checkbox"
+                checked={!!localLayers[l.id]}
+                onChange={() => toggleLayer(l.id)}
+              />
+              <span>{l.label}</span>
+            </label>
+          ))}
+          <p className="map-layer-hint">Teachers show when zoomed in or searched.</p>
+        </div>
+      )}
+
+      {selected && (
+        <div className="map-popup-card">
+          <button type="button" className="map-popup-close" onClick={() => onSelect?.(null)} aria-label="Close">
+            ×
+          </button>
+          <div className="map-popup-kind">
+            {selected.type === 'teacher'
+              ? 'Teacher'
+              : selected.type === 'amenity'
+                ? AMENITY_META[selected.kind]?.label || 'Amenity'
+                : 'Building'}
+          </div>
+          <h2>{selected.name}</h2>
+          {selected.type === 'teacher' ? (
+            <ul className="map-popup-meta">
+              {selected.designation && <li>{selected.designation}</li>}
+              {selected.blockName && <li>{selected.blockName}</li>}
+              {(selected.floor || selected.room) && (
+                <li>
+                  {[selected.floor, selected.room ? `Room ${selected.room}` : '']
+                    .filter(Boolean)
+                    .join(' · ')}
+                </li>
+              )}
+              {selected.hours && <li>{selected.hours}</li>}
+            </ul>
+          ) : (
+            <ul className="map-popup-meta">
+              {selected.subtitle && <li>{selected.subtitle}</li>}
+              {selected.hours && <li>{selected.hours}</li>}
+            </ul>
+          )}
+          <button
+            type="button"
+            className="btn btn-primary map-popup-nav"
+            onClick={() => onNavigate?.(selected)}
+          >
+            Navigate
+          </button>
+        </div>
+      )}
+
+      {shownDistance != null && (
+        <div className="map-dist-chip">
+          <strong>{shownDistance} m</strong>
+          <span>· ~{shownMinutes} min walk</span>
+        </div>
+      )}
     </div>
   )
 }

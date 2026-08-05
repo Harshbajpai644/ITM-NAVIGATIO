@@ -12,12 +12,11 @@ function Shell({ theme, toggle }) {
   const location = useLocation()
   const isHome = location.pathname === '/'
   const isMap = location.pathname === '/map'
-  const hasDest = isMap && new URLSearchParams(location.search).has('dest')
   const hideFooter = isHome || isMap
   const hideNavbar = isHome || isMap
-  const shellClass = isHome || (isMap && !hasDest)
+  const shellClass = isHome
     ? 'app-shell app-shell-landing'
-    : hasDest
+    : isMap
       ? 'app-shell app-shell-map'
       : 'app-shell'
 
