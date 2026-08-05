@@ -1,14 +1,7 @@
-import { useEffect, useState, useCallback, useMemo, lazy, Suspense } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useSearchParams, Link } from 'react-router-dom'
+import CampusMap from '../components/CampusMap.jsx'
 import { BLOCKS } from '../data/campusData.js'
-import {
-  buildTeacherPlaces,
-  buildSearchIndex,
-  filterPlaces,
-  defaultLayerState,
-} from '../data/mapLayers.js'
-
-const CampusMap = lazy(() => import('../components/CampusMap.jsx'))
 
 const GPS_OPTS = {
   enableHighAccuracy: true,
@@ -33,7 +26,25 @@ function savePinOverride(id, lat, lng) {
   return all
 }
 
+function categoryLabel(category) {
+  const key = String(category || '').toLowerCase()
+  if (key === 'library') return 'Library'
+  if (key === 'hostel') return 'Hostel'
+  if (key === 'admission') return 'Admission'
+  if (key === 'canteen') return 'Canteen'
+  if (key === 'blocks') return 'Academic'
+  if (key.includes('engineering')) return 'Academic'
+  if (key.includes('management')) return 'Academic'
+  if (key.includes('nursing')) return 'Academic'
+  if (key.includes('fashion') || key.includes('design')) return 'Academic'
+  if (key.includes('physical') || key.includes('sport')) return 'Sports'
+  if (key.includes('admin')) return 'Administrative'
+  return 'Campus'
+}
+
 export default function MapPage() {
+  const [params, setParams] = useSearchParams()
+  const destId = params.get('dest') || ''
   const [locStatus, setLocStatus] = useState('idle')
   const [errorMsg, setErrorMsg] = useState('')
   const [userPos, setUserPos] = useState(null)
@@ -41,29 +52,31 @@ export default function MapPage() {
   const [pinOverrides, setPinOverrides] = useState(() => loadPinOverrides())
   const [calibrateMsg, setCalibrateMsg] = useState('')
   const [query, setQuery] = useState('')
-  const [selected, setSelected] = useState(null)
-  const [dest, setDest] = useState(null)
-  const [focusTarget, setFocusTarget] = useState(null)
-  const [layers] = useState(() => defaultLayerState())
-  const [watching, setWatching] = useState(false)
+  const [showTeachers, setShowTeachers] = useState(false)
+  const [navStarted, setNavStarted] = useState(false)
 
-  const buildings = useMemo(() => {
-    return BLOCKS.map((b) => {
-      const ov = pinOverrides[b.id]
-      return ov ? { ...b, lat: ov.lat, lng: ov.lng } : b
+  const baseBlock = BLOCKS.find((b) => b.id === destId)
+
+  const activeBlock = useMemo(() => {
+    if (!baseBlock) return null
+    const ov = pinOverrides[baseBlock.id]
+    if (!ov) return baseBlock
+    return { ...baseBlock, lat: ov.lat, lng: ov.lng }
+  }, [baseBlock, pinOverrides])
+
+  const filteredBlocks = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return BLOCKS
+    return BLOCKS.filter((b) => {
+      const hay = `${b.name} ${b.category} ${categoryLabel(b.category)}`.toLowerCase()
+      return hay.includes(q)
     })
-  }, [pinOverrides])
+  }, [query])
 
-  const teachers = useMemo(() => buildTeacherPlaces(buildings), [buildings])
-  const searchIndex = useMemo(
-    () => buildSearchIndex(buildings, teachers),
-    [buildings, teachers]
-  )
-  const searchHits = useMemo(() => filterPlaces(searchIndex, query), [searchIndex, query])
-  const searchingTeachers = query.trim().length > 0 && searchHits.some((h) => h.type === 'teacher')
+  const navigating = Boolean(destId && navStarted && locStatus === 'granted' && userPos)
 
   useEffect(() => {
-    if (!watching || locStatus !== 'granted') return undefined
+    if (!navStarted || locStatus !== 'granted') return
     const watchId = navigator.geolocation.watchPosition(
       (pos) => {
         const next = {
@@ -85,205 +98,274 @@ export default function MapPage() {
       },
       () => {
         setLocStatus('error')
-        setErrorMsg('Location error. Turn on GPS and enable Precise location.')
+        setErrorMsg('Location error. Turn on GPS and enable Precise / High Accuracy location.')
       },
       GPS_OPTS
     )
     return () => navigator.geolocation.clearWatch(watchId)
-  }, [watching, locStatus])
+  }, [navStarted, locStatus])
 
-  const enableLocation = useCallback(() => {
+  const enableLocation = () => {
     if (!('geolocation' in navigator)) {
       setLocStatus('error')
       setErrorMsg('This browser does not support location.')
-      return Promise.reject(new Error('no geolocation'))
+      return
     }
     setLocStatus('loading')
-    return new Promise((resolve, reject) => {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          const next = {
-            lat: pos.coords.latitude,
-            lng: pos.coords.longitude,
-            accuracy: pos.coords.accuracy,
-          }
-          setUserPos(next)
-          setLocStatus('granted')
-          setWatching(true)
-          resolve(next)
-        },
-        () => {
-          setLocStatus('error')
-          setErrorMsg('Allow location access. Keep Precise location ON.')
-          reject(new Error('denied'))
-        },
-        GPS_OPTS
-      )
-    })
-  }, [])
-
-  const handleNavigate = useCallback(
-    async (place) => {
-      if (!place) return
-      setArrived(false)
-      setCalibrateMsg('')
-      setSelected(null)
-      setDest({
-        id: place.blockId || place.id,
-        name: place.type === 'teacher' ? `${place.name} (${place.blockName || 'Cabin'})` : place.name,
-        lat: place.lat,
-        lng: place.lng,
-        type: place.type,
-      })
-      setFocusTarget({ lat: place.lat, lng: place.lng, id: place.id })
-      try {
-        if (locStatus !== 'granted' || !userPos) {
-          await enableLocation()
-        } else {
-          setWatching(true)
-        }
-      } catch (_) {}
-    },
-    [enableLocation, locStatus, userPos]
-  )
-
-  const handleSelectSearch = (place) => {
-    setQuery('')
-    setSelected(place)
-    setFocusTarget({ lat: place.lat, lng: place.lng, id: place.id })
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setUserPos({
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          accuracy: pos.coords.accuracy,
+        })
+        setLocStatus('granted')
+        setNavStarted(true)
+      },
+      () => {
+        setLocStatus('error')
+        setErrorMsg('Allow location access (https / localhost). Keep Precise location ON.')
+      },
+      GPS_OPTS
+    )
   }
 
-  const clearNav = () => {
-    setDest(null)
-    setArrived(false)
-    setCalibrateMsg('')
-    setSelected(null)
+  const startNavigation = () => {
+    if (locStatus === 'granted' && userPos) {
+      setNavStarted(true)
+      return
+    }
+    enableLocation()
   }
+
+  const handleArrived = useCallback(() => setArrived(true), [])
 
   const calibratePin = useCallback(() => {
-    if (!userPos || !dest) return
+    if (!userPos || !activeBlock) return
+    // Allow pin even when weak, but warn — campus indoor GPS is often poor
     if (userPos.accuracy != null && userPos.accuracy > 50) {
       setCalibrateMsg(
-        `GPS still weak (±${Math.round(userPos.accuracy)} m). Wait in open sky, then tap Set pin here again.`
+        `GPS still weak (±${Math.round(userPos.accuracy)} m). Wait in open sky near the entrance, then tap Set pin here again.`
       )
       return
     }
-    const pinId = dest.id
-    if (!BLOCKS.some((b) => b.id === pinId)) {
-      setCalibrateMsg('Pin calibrate works for campus buildings. Stand at the building entrance.')
-      return
-    }
-    const next = savePinOverride(pinId, userPos.lat, userPos.lng)
+    const next = savePinOverride(activeBlock.id, userPos.lat, userPos.lng)
     setPinOverrides(next)
-    const line = `${pinId}: ${userPos.lat.toFixed(6)}, ${userPos.lng.toFixed(6)}`
-    setCalibrateMsg(`${dest.name} pin saved: ${line}`)
-    setDest((d) => (d ? { ...d, lat: userPos.lat, lng: userPos.lng } : d))
+    const line = `${activeBlock.id}: ${userPos.lat.toFixed(6)}, ${userPos.lng.toFixed(6)}`
+    setCalibrateMsg(`${activeBlock.name} pin saved. Send this to update code: ${line}`)
     try {
       navigator.clipboard?.writeText?.(line)
     } catch (_) {}
-  }, [userPos, dest])
+  }, [userPos, activeBlock])
 
-  useEffect(() => {
-    if (!dest || !userPos) return
-    const R = 6371000
-    const toRad = (d) => (d * Math.PI) / 180
-    const dLat = toRad(dest.lat - userPos.lat)
-    const dLng = toRad(dest.lng - userPos.lng)
-    const x =
-      Math.sin(dLat / 2) ** 2 +
-      Math.cos(toRad(userPos.lat)) * Math.cos(toRad(dest.lat)) * Math.sin(dLng / 2) ** 2
-    const dist = R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x))
-    const acc = userPos.accuracy ?? 999
-    if (dist < 20 && acc < Math.max(25, dist * 0.8)) setArrived(true)
-  }, [dest, userPos])
+  const chooseDestination = (id) => {
+    setArrived(false)
+    setCalibrateMsg('')
+    setShowTeachers(false)
+    setNavStarted(false)
+    setParams({ dest: id })
+  }
 
-  return (
-    <div className="page-map-full map-explore-page">
-      <div className="map-explore-top">
-        <div className="map-explore-brand">
-          <Link to="/" className="dest-back">
-            ← Home
-          </Link>
-          <div>
-            <div className="eyebrow">{arrived ? 'You have arrived' : dest ? 'Navigating to' : 'Campus map'}</div>
-            <h1 className="page-title" style={{ fontSize: 18, marginBottom: 0 }}>
-              {dest?.name || 'ITM University Gwalior'}
-            </h1>
+  const clearDestination = () => {
+    setShowTeachers(false)
+    setNavStarted(false)
+    setArrived(false)
+    setCalibrateMsg('')
+    setParams({})
+  }
+
+  const teachers = useMemo(() => {
+    const list = activeBlock?.people || []
+    return list.filter((p) => (p.name && p.name.trim()) || (p.room && String(p.room).trim()))
+  }, [activeBlock])
+
+  if (!destId) {
+    return (
+      <section className="dest-picker" aria-label="Choose destination">
+        <div className="dest-picker-bg" aria-hidden="true" />
+        <div className="dest-picker-shade" aria-hidden="true" />
+
+        <div className="dest-picker-inner">
+          <header className="dest-picker-top">
+            <Link to="/" className="dest-picker-brand">
+              <span className="dest-picker-mark" aria-hidden="true" />
+              <span>
+                <strong>ITM NAVIGATOR</strong>
+                <em>Where do you want to go?</em>
+              </span>
+            </Link>
+          </header>
+
+          <div className="dest-picker-hero">
+            <h1>Choose your destination</h1>
+            <p>
+              Campus directions with <em>live GPS</em>
+            </p>
           </div>
-        </div>
 
-        <div className="map-explore-search">
-          <label className="map-search-field" htmlFor="map-search-input">
-            <span aria-hidden="true">⌕</span>
+          <label className="dest-search" htmlFor="dest-search-input">
+            <span className="dest-search-icon" aria-hidden="true">
+              ⌕
+            </span>
             <input
-              id="map-search-input"
+              id="dest-search-input"
               type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search building, teacher, parking..."
+              placeholder="Search buildings..."
               autoComplete="off"
             />
           </label>
-          {searchHits.length > 0 && (
-            <ul className="map-search-hits" role="listbox">
-              {searchHits.map((hit) => (
-                <li key={hit.id}>
-                  <button type="button" onClick={() => handleSelectSearch(hit)}>
-                    <strong>{hit.name}</strong>
-                    <span>{hit.subtitle}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
+
+          <ul className="dest-list" role="list">
+            {filteredBlocks.map((b) => (
+              <li key={b.id}>
+                <button
+                  type="button"
+                  className="dest-row"
+                  onClick={() => chooseDestination(b.id)}
+                >
+                  <img
+                    className="dest-row-photo"
+                    src={b.image}
+                    alt=""
+                    loading="lazy"
+                    onError={(e) => {
+                      e.currentTarget.onerror = null
+                      e.currentTarget.src = '/campus-walk.jpg'
+                    }}
+                  />
+                  <span className="dest-row-text">
+                    <strong>{b.name}</strong>
+                    <span>{categoryLabel(b.category)}</span>
+                  </span>
+                  <span className="dest-row-chevron" aria-hidden="true">
+                    ›
+                  </span>
+                </button>
+              </li>
+            ))}
+            {filteredBlocks.length === 0 && (
+              <li className="dest-empty">No buildings match your search.</li>
+            )}
+          </ul>
+        </div>
+      </section>
+    )
+  }
+
+  if (!navStarted) {
+    const locationReady = locStatus === 'granted' && userPos
+    return (
+      <section className="dest-picker dest-picker-compact" aria-label="Building details">
+        <div className="dest-picker-bg" aria-hidden="true" />
+        <div className="dest-picker-shade" aria-hidden="true" />
+        <div className="dest-picker-inner dest-gps-panel">
+          <button type="button" className="dest-back" onClick={clearDestination}>
+            ← Change destination
+          </button>
+          <div className="eyebrow">{activeBlock?.name}</div>
+          <h1 className="page-title">
+            {locationReady ? 'Start navigation' : 'Turn on live location'}
+          </h1>
+          <p className="page-sub dest-gps-help">
+            Enable precise GPS. If the pin looks wrong, stand at the building and use “Set pin here” on
+            the map.
+          </p>
+
+          {teachers.length > 0 && (
+            <div className="dest-teachers">
+              <div className="dest-teachers-head">
+                <h2>Teachers in this building</h2>
+                <button
+                  type="button"
+                  className="dest-teachers-view"
+                  onClick={() => setShowTeachers((v) => !v)}
+                  aria-expanded={showTeachers}
+                >
+                  {showTeachers ? 'Hide' : 'View'}
+                </button>
+              </div>
+              {showTeachers && (
+                <div className="dest-teachers-table-wrap">
+                  <table className="dest-teachers-table">
+                    <thead>
+                      <tr>
+                        <th scope="col">Floor</th>
+                        <th scope="col">Name</th>
+                        <th scope="col">Room No</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {teachers.map((p, i) => (
+                        <tr key={`${p.name}-${p.room}-${i}`}>
+                          <td>{p.floor?.trim() || '—'}</td>
+                          <td>{p.name?.trim() || p.designation || '—'}</td>
+                          <td>{p.room?.trim() || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          <button
+            className="btn btn-primary"
+            onClick={startNavigation}
+            disabled={locStatus === 'loading'}
+          >
+            {locStatus === 'loading'
+              ? 'Detecting…'
+              : locationReady
+                ? 'Start navigation'
+                : 'Turn on your location'}
+          </button>
+          {locStatus === 'error' && <p className="status-note error">{errorMsg}</p>}
+        </div>
+      </section>
+    )
+  }
+
+  return (
+    <div className={navigating ? 'page-map-full' : 'page page-narrow'}>
+      <div className={navigating ? 'map-full-top' : 'map-toolbar'}>
+        <div>
+          <button type="button" className="dest-back" onClick={clearDestination}>
+            ← Change destination
+          </button>
+          <div className="eyebrow">{arrived ? 'You have arrived' : 'Navigating to'}</div>
+          <h1 className="page-title" style={{ fontSize: navigating ? 18 : 20, marginBottom: 0 }}>
+            {activeBlock?.name}
+          </h1>
+          {calibrateMsg && (
+            <p className="status-note go" style={{ margin: '6px 0 0' }}>
+              {calibrateMsg}
+            </p>
           )}
         </div>
-
-        <div className="map-explore-actions">
-          {locStatus !== 'granted' ? (
-            <button
-              type="button"
-              className="btn btn-primary"
-              style={{ width: 'auto' }}
-              onClick={() => enableLocation()}
-              disabled={locStatus === 'loading'}
-            >
-              {locStatus === 'loading' ? 'Detecting…' : 'Turn on GPS'}
-            </button>
-          ) : (
-            <span className="map-gps-pill">GPS on</span>
-          )}
-          {dest && (
-            <button type="button" className="map-float-btn" onClick={clearNav}>
-              Clear route
-            </button>
-          )}
-        </div>
-
-        {calibrateMsg && <p className="status-note go map-explore-note">{calibrateMsg}</p>}
-        {locStatus === 'error' && <p className="status-note error map-explore-note">{errorMsg}</p>}
+        {arrived && (
+          <Link
+            className="btn btn-accent"
+            to={`/building/${activeBlock.id}`}
+            style={{ width: 'auto', textDecoration: 'none' }}
+          >
+            Building details →
+          </Link>
+        )}
       </div>
 
-      <Suspense
-        fallback={
-          <div className="loading-screen" style={{ position: 'relative', minHeight: '60vh' }}>
-            <p className="loading-text">Loading map…</p>
-          </div>
-        }
-      >
-        <CampusMap
-          buildings={buildings}
-          teachers={teachers}
-          layers={layers}
-          userPos={userPos}
-          dest={dest}
-          selected={selected}
-          onSelect={setSelected}
-          onNavigate={handleNavigate}
-          focusTarget={focusTarget}
-          onCalibratePin={dest ? calibratePin : null}
-          searchingTeachers={searchingTeachers}
-        />
-      </Suspense>
+      <CampusMap
+        userPos={userPos}
+        block={activeBlock}
+        buildings={BLOCKS.map((b) => {
+          const ov = pinOverrides[b.id]
+          return ov ? { ...b, lat: ov.lat, lng: ov.lng } : b
+        })}
+        onArrived={handleArrived}
+        onCalibratePin={calibratePin}
+      />
     </div>
   )
 }

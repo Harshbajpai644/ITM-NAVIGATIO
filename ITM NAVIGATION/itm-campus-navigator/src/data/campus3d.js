@@ -2,14 +2,8 @@ import { CAMPUS_CENTER } from './campusData.js'
 
 /**
  * Campus map tiles:
- * - OSM streets always load (never blank)
- * - Esri satellite on top, capped at z16 — beyond that MapLibre
- *   overscales real imagery instead of Esri's
- *   "Map data not yet available" placeholders (common on this campus).
- */
-/**
- * Cap at Esri native tile zoom (16). Going higher overscales
- * imagery and looks blurry/pixelated on this campus.
+ * - Carto streets underlay (OSM official tiles often block apps → blank map)
+ * - Esri satellite on top, capped at z16
  */
 export const CAMPUS_MAX_ZOOM = 16
 export const CAMPUS_MIN_ZOOM = 14.5
@@ -22,10 +16,12 @@ export const CAMPUS_SATELLITE_STYLE = {
   sources: {
     osm: {
       type: 'raster',
-      tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+      tiles: [
+        'https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
+      ],
       tileSize: 256,
-      attribution: '© OpenStreetMap',
-      maxzoom: 19,
+      attribution: '© OpenStreetMap © CARTO',
+      maxzoom: 20,
     },
     satellite: {
       type: 'raster',

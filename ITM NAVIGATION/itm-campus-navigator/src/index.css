@@ -663,9 +663,17 @@ input.text-input:focus, select.select-input:focus, textarea.text-input:focus{ ou
   border-radius:999px;
   padding:8px 12px;
 }
-.map-explore-note{
-  grid-column:1 / -1;
-  margin:0;
+.map-nav-search{
+  position:absolute;
+  z-index:4;
+  top:12px;
+  left:12px;
+  width:min(280px, calc(100vw - 140px));
+}
+.map-nav-search .map-search-hits{
+  position:absolute;
+  left:0;
+  right:0;
 }
 .map-explore-page .map-card-full{
   min-height:0;
