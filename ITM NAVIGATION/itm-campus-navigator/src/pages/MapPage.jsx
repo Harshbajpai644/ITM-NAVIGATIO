@@ -1,6 +1,5 @@
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useEffect, useState, useCallback, useMemo, lazy, Suspense } from 'react'
 import { Link } from 'react-router-dom'
-import CampusMap from '../components/CampusMap.jsx'
 import { BLOCKS } from '../data/campusData.js'
 import {
   buildTeacherPlaces,
@@ -8,6 +7,8 @@ import {
   filterPlaces,
   defaultLayerState,
 } from '../data/mapLayers.js'
+
+const CampusMap = lazy(() => import('../components/CampusMap.jsx'))
 
 const GPS_OPTS = {
   enableHighAccuracy: true,
@@ -262,19 +263,27 @@ export default function MapPage() {
         {locStatus === 'error' && <p className="status-note error map-explore-note">{errorMsg}</p>}
       </div>
 
-      <CampusMap
-        buildings={buildings}
-        teachers={teachers}
-        layers={layers}
-        userPos={userPos}
-        dest={dest}
-        selected={selected}
-        onSelect={setSelected}
-        onNavigate={handleNavigate}
-        focusTarget={focusTarget}
-        onCalibratePin={dest ? calibratePin : null}
-        searchingTeachers={searchingTeachers}
-      />
+      <Suspense
+        fallback={
+          <div className="loading-screen" style={{ position: 'relative', minHeight: '60vh' }}>
+            <p className="loading-text">Loading map…</p>
+          </div>
+        }
+      >
+        <CampusMap
+          buildings={buildings}
+          teachers={teachers}
+          layers={layers}
+          userPos={userPos}
+          dest={dest}
+          selected={selected}
+          onSelect={setSelected}
+          onNavigate={handleNavigate}
+          focusTarget={focusTarget}
+          onCalibratePin={dest ? calibratePin : null}
+          searchingTeachers={searchingTeachers}
+        />
+      </Suspense>
     </div>
   )
 }

@@ -1,5 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap');
-
 :root{
   --primary:#0B3760;
   --primary-deep:#082a4a;
@@ -31,7 +29,7 @@ html, body, #root{ min-height:100%; margin:0; }
 body{
   background:var(--bg);
   color:var(--ink);
-  font-family:'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family:'Space Grotesk', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   -webkit-font-smoothing:antialiased;
   transition: background .25s ease, color .25s ease;
 }
@@ -376,7 +374,7 @@ p.page-sub{ font-size:14.5px; color:var(--slate); line-height:1.6; margin:0 0 26
 }
 .search-input-row input{
   flex:1; border:none; background:transparent; font-size:15px; padding:10px 4px;
-  color:var(--ink); font-family:'Inter', sans-serif;
+  color:var(--ink); font-family:'Space Grotesk', system-ui, sans-serif;
 }
 .search-input-row input:focus{ outline:none; }
 .search-go{
@@ -449,7 +447,7 @@ label.field-label{
 .field{ margin-bottom:18px; }
 input.text-input, select.select-input, textarea.text-input{
   width:100%; background:var(--panel-solid); border:1px solid var(--line); color:var(--ink);
-  font-family:'Inter', sans-serif; font-size:15px; padding:13px 14px; border-radius:10px;
+  font-family:'Space Grotesk', system-ui, sans-serif; font-size:15px; padding:13px 14px; border-radius:10px;
 }
 input.text-input:focus, select.select-input:focus, textarea.text-input:focus{ outline:none; border-color:var(--accent); }
 

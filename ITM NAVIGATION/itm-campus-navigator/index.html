@@ -4,13 +4,53 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
     <title>ITM University Gwalior · Campus Navigator</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       rel="stylesheet"
-      href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap"
     />
+    <style>
+      html, body, #root { margin: 0; min-height: 100%; background: #0B3760; }
+      .boot-splash {
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 14px;
+        font-family: 'Space Grotesk', system-ui, sans-serif;
+        color: #fff;
+      }
+      .boot-splash strong {
+        font-size: 22px;
+        letter-spacing: 0.04em;
+      }
+      .boot-splash span {
+        font-size: 13px;
+        opacity: 0.75;
+      }
+      .boot-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: #00C2A8;
+        animation: bootPulse 1s ease-in-out infinite;
+      }
+      @keyframes bootPulse {
+        0%, 100% { transform: scale(0.8); opacity: 0.5; }
+        50% { transform: scale(1.2); opacity: 1; }
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div class="boot-splash" aria-live="polite">
+        <div class="boot-dot" aria-hidden="true"></div>
+        <strong>ITM NAVIGATOR</strong>
+        <span>Loading campus map…</span>
+      </div>
+    </div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

@@ -9,6 +9,8 @@ export default function Home() {
           className="walk-landing-photo"
           src="/campus-walk.jpg"
           alt=""
+          decoding="async"
+          fetchPriority="high"
           onError={(e) => {
             e.currentTarget.onerror = null
             e.currentTarget.src = '/kirloskar-block.jpg'
