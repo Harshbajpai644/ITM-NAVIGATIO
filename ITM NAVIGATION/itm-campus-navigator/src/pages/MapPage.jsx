@@ -53,6 +53,7 @@ export default function MapPage() {
   const [calibrateMsg, setCalibrateMsg] = useState('')
   const [query, setQuery] = useState('')
   const [showTeachers, setShowTeachers] = useState(false)
+  const [navStarted, setNavStarted] = useState(false)
 
   const baseBlock = BLOCKS.find((b) => b.id === destId)
 
@@ -72,10 +73,10 @@ export default function MapPage() {
     })
   }, [query])
 
-  const navigating = Boolean(destId && locStatus === 'granted' && userPos)
+  const navigating = Boolean(destId && navStarted && locStatus === 'granted' && userPos)
 
   useEffect(() => {
-    if (locStatus !== 'granted') return
+    if (!navStarted || locStatus !== 'granted') return
     const watchId = navigator.geolocation.watchPosition(
       (pos) => {
         const next = {
@@ -102,7 +103,7 @@ export default function MapPage() {
       GPS_OPTS
     )
     return () => navigator.geolocation.clearWatch(watchId)
-  }, [locStatus])
+  }, [navStarted, locStatus])
 
   const enableLocation = () => {
     if (!('geolocation' in navigator)) {
@@ -119,6 +120,7 @@ export default function MapPage() {
           accuracy: pos.coords.accuracy,
         })
         setLocStatus('granted')
+        setNavStarted(true)
       },
       () => {
         setLocStatus('error')
@@ -126,6 +128,14 @@ export default function MapPage() {
       },
       GPS_OPTS
     )
+  }
+
+  const startNavigation = () => {
+    if (locStatus === 'granted' && userPos) {
+      setNavStarted(true)
+      return
+    }
+    enableLocation()
   }
 
   const handleArrived = useCallback(() => setArrived(true), [])
@@ -149,7 +159,16 @@ export default function MapPage() {
     setArrived(false)
     setCalibrateMsg('')
     setShowTeachers(false)
+    setNavStarted(false)
     setParams({ dest: id })
+  }
+
+  const clearDestination = () => {
+    setShowTeachers(false)
+    setNavStarted(false)
+    setArrived(false)
+    setCalibrateMsg('')
+    setParams({})
   }
 
   const teachers = useMemo(() => {
@@ -232,17 +251,20 @@ export default function MapPage() {
     )
   }
 
-  if (locStatus !== 'granted') {
+  if (!navStarted) {
+    const locationReady = locStatus === 'granted' && userPos
     return (
-      <section className="dest-picker dest-picker-compact" aria-label="Enable location">
+      <section className="dest-picker dest-picker-compact" aria-label="Building details">
         <div className="dest-picker-bg" aria-hidden="true" />
         <div className="dest-picker-shade" aria-hidden="true" />
         <div className="dest-picker-inner dest-gps-panel">
-          <Link to="/map" className="dest-back" onClick={() => setShowTeachers(false)}>
+          <button type="button" className="dest-back" onClick={clearDestination}>
             ← Change destination
-          </Link>
+          </button>
           <div className="eyebrow">{activeBlock?.name}</div>
-          <h1 className="page-title">Turn on live location</h1>
+          <h1 className="page-title">
+            {locationReady ? 'Start navigation' : 'Turn on live location'}
+          </h1>
           <p className="page-sub dest-gps-help">
             Enable precise GPS. If the pin looks wrong, stand at the building and use “Set pin here” on
             the map.
@@ -284,8 +306,16 @@ export default function MapPage() {
             </div>
           )}
 
-          <button className="btn btn-primary" onClick={enableLocation} disabled={locStatus === 'loading'}>
-            {locStatus === 'loading' ? 'Detecting…' : 'Turn on your location'}
+          <button
+            className="btn btn-primary"
+            onClick={startNavigation}
+            disabled={locStatus === 'loading'}
+          >
+            {locStatus === 'loading'
+              ? 'Detecting…'
+              : locationReady
+                ? 'Start navigation'
+                : 'Turn on your location'}
           </button>
           {locStatus === 'error' && <p className="status-note error">{errorMsg}</p>}
         </div>
@@ -297,6 +327,9 @@ export default function MapPage() {
     <div className={navigating ? 'page-map-full' : 'page page-narrow'}>
       <div className={navigating ? 'map-full-top' : 'map-toolbar'}>
         <div>
+          <button type="button" className="dest-back" onClick={clearDestination}>
+            ← Change destination
+          </button>
           <div className="eyebrow">{arrived ? 'You have arrived' : 'Navigating to'}</div>
           <h1 className="page-title" style={{ fontSize: navigating ? 18 : 20, marginBottom: 0 }}>
             {activeBlock?.name}
