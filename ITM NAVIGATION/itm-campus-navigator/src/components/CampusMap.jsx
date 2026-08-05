@@ -1,7 +1,12 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
-import Map, { Marker, NavigationControl } from '@vis.gl/react-maplibre'
+import Map, { Marker } from '@vis.gl/react-maplibre'
 import 'maplibre-gl/dist/maplibre-gl.css'
-import { CAMPUS_SATELLITE_STYLE, CAMPUS_OVERVIEW_CAMERA, CAMPUS_MAX_ZOOM } from '../data/campus3d.js'
+import {
+  CAMPUS_SATELLITE_STYLE,
+  CAMPUS_OVERVIEW_CAMERA,
+  CAMPUS_MAX_ZOOM,
+  CAMPUS_MIN_ZOOM,
+} from '../data/campus3d.js'
 
 function haversineM(a, b) {
   const R = 6371000
@@ -14,38 +19,13 @@ function haversineM(a, b) {
   return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x))
 }
 
-function fmtCoord(n) {
-  return Number(n).toFixed(6)
-}
-
-/** Compass label from you → destination (map north-up). */
-function bearingLabel(from, to) {
-  const toRad = (d) => (d * Math.PI) / 180
-  const toDeg = (r) => (r * 180) / Math.PI
-  const y = Math.sin(toRad(to.lng - from.lng)) * Math.cos(toRad(to.lat))
-  const x =
-    Math.cos(toRad(from.lat)) * Math.sin(toRad(to.lat)) -
-    Math.sin(toRad(from.lat)) * Math.cos(toRad(to.lat)) * Math.cos(toRad(to.lng - from.lng))
-  let brng = (toDeg(Math.atan2(y, x)) + 360) % 360
-  const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']
-  return dirs[Math.round(brng / 45) % 8]
-}
-
-/** meters → screen pixels at current map center latitude/zoom (approx). */
-function metersToPixels(map, lat, meters) {
-  const zoom = map.getZoom()
-  const latRad = (lat * Math.PI) / 180
-  const metersPerPx = (156543.03392 * Math.cos(latRad)) / Math.pow(2, zoom)
-  return meters / metersPerPx
-}
-
-function useProjectedRoute(mapRef, pathCoords, userPos, accuracyM, viewState) {
-  const [screen, setScreen] = useState({ line: '', arrows: [], you: null, accR: 0 })
+function useProjectedRoute(mapRef, pathCoords, viewState) {
+  const [screen, setScreen] = useState({ line: '', arrows: [] })
 
   useEffect(() => {
     const map = mapRef.current?.getMap?.()
     if (!map || pathCoords.length < 2) {
-      setScreen({ line: '', arrows: [], you: null, accR: 0 })
+      setScreen({ line: '', arrows: [] })
       return undefined
     }
 
@@ -69,17 +49,9 @@ function useProjectedRoute(mapRef, pathCoords, userPos, accuracyM, viewState) {
             key: `${i}-${Math.round(a.x)}`,
           })
         }
-        let you = null
-        let accR = 0
-        if (userPos) {
-          you = map.project({ lng: userPos.lng, lat: userPos.lat })
-          if (accuracyM != null && accuracyM > 0) {
-            accR = metersToPixels(map, userPos.lat, accuracyM)
-          }
-        }
-        setScreen({ line, arrows, you, accR })
+        setScreen({ line, arrows })
       } catch (_) {
-        setScreen({ line: '', arrows: [], you: null, accR: 0 })
+        setScreen({ line: '', arrows: [] })
       }
     }
 
@@ -92,7 +64,7 @@ function useProjectedRoute(mapRef, pathCoords, userPos, accuracyM, viewState) {
       map.off('zoom', project)
       map.off('resize', project)
     }
-  }, [mapRef, pathCoords, userPos, accuracyM, viewState])
+  }, [mapRef, pathCoords, viewState])
 
   return screen
 }
@@ -103,7 +75,7 @@ export default function CampusMap({ userPos, block, onArrived, onCalibratePin })
   const [viewState, setViewState] = useState({
     longitude: block?.lng ?? CAMPUS_OVERVIEW_CAMERA.longitude,
     latitude: block?.lat ?? CAMPUS_OVERVIEW_CAMERA.latitude,
-    zoom: 16.2,
+    zoom: 15.8,
     pitch: 0,
     bearing: 0,
   })
@@ -132,39 +104,21 @@ export default function CampusMap({ userPos, block, onArrived, onCalibratePin })
   const directionUnreliable =
     accuracyM != null && liveDistanceM != null && accuracyM >= Math.max(25, liveDistanceM * 0.8)
 
-  const dir = useMemo(() => {
-    if (!userPos || !block) return null
-    return bearingLabel(userPos, block)
-  }, [userPos, block])
-
-  const projected = useProjectedRoute(
-    mapRef,
-    pathCoords,
-    userPos,
-    accuracyM,
-    { ...viewState, mapTick }
-  )
+  const projected = useProjectedRoute(mapRef, pathCoords, { ...viewState, mapTick })
 
   const fitBoth = useCallback(() => {
     if (!mapRef.current || !userPos || !block) return
     try {
       const map = mapRef.current.getMap()
-      const padAcc = accuracyM ? accuracyM / 111320 : 0
       map.fitBounds(
         [
-          [
-            Math.min(userPos.lng, block.lng) - padAcc,
-            Math.min(userPos.lat, block.lat) - padAcc,
-          ],
-          [
-            Math.max(userPos.lng, block.lng) + padAcc,
-            Math.max(userPos.lat, block.lat) + padAcc,
-          ],
+          [Math.min(userPos.lng, block.lng), Math.min(userPos.lat, block.lat)],
+          [Math.max(userPos.lng, block.lng), Math.max(userPos.lat, block.lat)],
         ],
-        { padding: 110, duration: 700, maxZoom: 16.8, pitch: 0, bearing: 0 }
+        { padding: 110, duration: 700, maxZoom: CAMPUS_MAX_ZOOM, pitch: 0, bearing: 0 }
       )
     } catch (_) {}
-  }, [userPos, block, accuracyM])
+  }, [userPos, block])
 
   useEffect(() => {
     if (!userPos || !block) return
@@ -174,8 +128,7 @@ export default function CampusMap({ userPos, block, onArrived, onCalibratePin })
         ...v,
         longitude: (userPos.lng + block.lng) / 2,
         latitude: (userPos.lat + block.lat) / 2,
-        // Stay at/under Esri real-tile zoom for this campus
-        zoom: d < 100 ? 16.8 : d < 250 ? 16.4 : Math.min(Math.max(v.zoom, 15.8), 16.5),
+        zoom: d < 100 ? 16 : d < 250 ? 15.6 : Math.min(Math.max(v.zoom, 15.2), CAMPUS_MAX_ZOOM),
         pitch: 0,
         bearing: 0,
       }))
@@ -221,12 +174,11 @@ export default function CampusMap({ userPos, block, onArrived, onCalibratePin })
           onLoad={onLoad}
           mapStyle={CAMPUS_SATELLITE_STYLE}
           style={{ width: '100%', height: '100%' }}
+          minZoom={CAMPUS_MIN_ZOOM}
           maxZoom={CAMPUS_MAX_ZOOM}
           maxPitch={60}
-          attributionControl
+          attributionControl={false}
         >
-          <NavigationControl position="top-right" />
-
           <Marker longitude={block.lng} latitude={block.lat} anchor="bottom">
             <div className="coord-pin dest-pin">
               <div className="coord-pin-title">{block.name}</div>
@@ -246,27 +198,13 @@ export default function CampusMap({ userPos, block, onArrived, onCalibratePin })
                 <span className="you-avatar-leg you-avatar-leg-r" />
               </div>
               <div className="you-avatar-label">
-                <strong>You (live)</strong>
-                {accuracyM != null && <span>±{accuracyM} m</span>}
+                <strong>You</strong>
               </div>
             </div>
           </Marker>
         </Map>
 
         <svg className="route-svg-overlay" aria-hidden="true">
-          {/* GPS accuracy circle — real uncertainty around You */}
-          {projected.you && projected.accR > 4 && (
-            <circle
-              cx={projected.you.x}
-              cy={projected.you.y}
-              r={projected.accR}
-              fill="rgba(15,76,129,0.12)"
-              stroke="#0F4C81"
-              strokeWidth="2"
-              strokeDasharray="6 4"
-            />
-          )}
-
           {projected.line && (
             <>
               <polyline
@@ -298,14 +236,6 @@ export default function CampusMap({ userPos, block, onArrived, onCalibratePin })
         </svg>
       </div>
 
-      <div className={`map-3d-badge ${directionUnreliable ? 'map-3d-badge-warn' : ''}`}>
-        {directionUnreliable
-          ? `GPS weak ±${accuracyM}m — direction unreliable`
-          : useSatellite
-            ? `Campus satellite · Live GPS · ${dir || ''}`
-            : `Streets map · Live GPS · ${dir || ''}`}
-      </div>
-
       <div className="map-float-actions">
         <button
           type="button"
@@ -315,7 +245,7 @@ export default function CampusMap({ userPos, block, onArrived, onCalibratePin })
           {useSatellite ? 'Streets map' : 'Satellite'}
         </button>
         <button type="button" className="map-float-btn" onClick={fitBoth}>
-          Fit both pins
+          Fit both
         </button>
         {onCalibratePin && (
           <button
@@ -329,46 +259,9 @@ export default function CampusMap({ userPos, block, onArrived, onCalibratePin })
         )}
       </div>
 
-      <div className="map-coord-panel">
-        {directionUnreliable && (
-          <div className="map-gps-warn">
-            GPS accuracy (±{accuracyM} m) is larger than the distance ({shownDistance} m), so{' '}
-            {block.name} may show the wrong direction. Wait 10–20 seconds in open sky, or stand at
-            the building and tap <strong>Set pin here</strong>.
-          </div>
-        )}
-        <div className="map-coord-row">
-          <span className="map-coord-label">Destination</span>
-          <span className="map-coord-value">
-            {block.name}
-            {dir && !directionUnreliable ? ` · ${dir}` : ''}
-            <br />
-            <code>
-              {fmtCoord(block.lat)}, {fmtCoord(block.lng)}
-            </code>
-          </span>
-        </div>
-        <div className="map-coord-row">
-          <span className="map-coord-label">Your live GPS</span>
-          <span className="map-coord-value">
-            <code>
-              {fmtCoord(userPos.lat)}, {fmtCoord(userPos.lng)}
-            </code>
-            {accuracyM != null && (
-              <>
-                <br />
-                <span className="map-coord-mins">GPS accuracy ±{accuracyM} m</span>
-              </>
-            )}
-          </span>
-        </div>
-        <div className="map-coord-row map-coord-dist">
-          <span className="map-coord-label">Distance now</span>
-          <span className="map-coord-value">
-            <strong>{shownDistance} m</strong>
-            <span className="map-coord-mins"> · ~{shownMinutes} min walk</span>
-          </span>
-        </div>
+      <div className="map-dist-chip">
+        <strong>{shownDistance} m</strong>
+        <span>· ~{shownMinutes} min</span>
       </div>
     </div>
   )

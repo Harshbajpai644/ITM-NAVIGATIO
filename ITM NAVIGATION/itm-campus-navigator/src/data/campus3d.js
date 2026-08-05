@@ -7,7 +7,9 @@ import { CAMPUS_CENTER } from './campusData.js'
  *   overscales real imagery instead of Esri's
  *   "Map data not yet available" placeholders (common on this campus).
  */
-export const CAMPUS_MAX_ZOOM = 17.5
+/** Hard cap — no overzoom into blank Esri tiles. */
+export const CAMPUS_MAX_ZOOM = 16
+export const CAMPUS_MIN_ZOOM = 14.5
 export const CAMPUS_TILE_MAX_ZOOM = 16
 
 export const CAMPUS_SATELLITE_STYLE = {
