@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
-import Map, { Marker, NavigationControl } from '@vis.gl/react-maplibre'
+import Map, { Marker, NavigationControl, Layer, Source } from '@vis.gl/react-maplibre'
 import 'maplibre-gl/dist/maplibre-gl.css'
-import { CAMPUS_CENTER } from '../data/campusData.js'
+import { CAMPUS_3D_STYLE, CAMPUS_3D_CAMERA, buildCampusBuildingsGeoJSON } from '../data/campus3d.js'
 
-const MAP_STYLE = 'https://tiles.openfreemap.org/styles/liberty'
+const BUILDINGS_GEOJSON = buildCampusBuildingsGeoJSON()
 
 function haversineM(a, b) {
   const R = 6371000
@@ -103,11 +103,11 @@ export default function CampusMap({ userPos, block, onArrived, onCalibratePin })
   const mapRef = useRef(null)
 
   const [viewState, setViewState] = useState({
-    longitude: block?.lng ?? CAMPUS_CENTER.lng,
-    latitude: block?.lat ?? CAMPUS_CENTER.lat,
-    zoom: 18,
-    pitch: 0,
-    bearing: 0,
+    longitude: block?.lng ?? CAMPUS_3D_CAMERA.longitude,
+    latitude: block?.lat ?? CAMPUS_3D_CAMERA.latitude,
+    zoom: CAMPUS_3D_CAMERA.zoom,
+    pitch: CAMPUS_3D_CAMERA.pitch,
+    bearing: CAMPUS_3D_CAMERA.bearing,
   })
   const [mapTick, setMapTick] = useState(0)
 
@@ -162,10 +162,10 @@ export default function CampusMap({ userPos, block, onArrived, onCalibratePin })
             Math.max(userPos.lat, block.lat) + padAcc,
           ],
         ],
-        { padding: 100, duration: 600, maxZoom: 19, pitch: 0 }
+        { padding: 100, duration: 700, maxZoom: 18.5, pitch: 55, bearing: viewState.bearing ?? -28 }
       )
     } catch (_) {}
-  }, [userPos, block, accuracyM])
+  }, [userPos, block, accuracyM, viewState.bearing])
 
   useEffect(() => {
     if (!userPos || !block) return
@@ -175,8 +175,8 @@ export default function CampusMap({ userPos, block, onArrived, onCalibratePin })
         ...v,
         longitude: (userPos.lng + block.lng) / 2,
         latitude: (userPos.lat + block.lat) / 2,
-        zoom: d < 80 ? 19 : d < 200 ? 18.2 : Math.max(v.zoom, 17.5),
-        pitch: 0,
+        zoom: d < 80 ? 18.4 : d < 200 ? 17.6 : Math.max(v.zoom, 16.8),
+        pitch: Math.max(v.pitch || 0, 52),
       }))
     } else {
       fitBoth()
@@ -210,19 +210,46 @@ export default function CampusMap({ userPos, block, onArrived, onCalibratePin })
           {...viewState}
           onMove={onMove}
           onLoad={onLoad}
-          mapStyle={MAP_STYLE}
+          mapStyle={CAMPUS_3D_STYLE}
           style={{ width: '100%', height: '100%' }}
-          maxPitch={60}
+          maxPitch={70}
           attributionControl
         >
-          <NavigationControl position="top-right" />
+          <Source id="campus-buildings" type="geojson" data={BUILDINGS_GEOJSON}>
+            <Layer
+              id="campus-buildings-extrusion"
+              type="fill-extrusion"
+              paint={{
+                'fill-extrusion-color': ['get', 'color'],
+                'fill-extrusion-height': ['get', 'height'],
+                'fill-extrusion-base': ['get', 'base'],
+                'fill-extrusion-opacity': 0.88,
+              }}
+            />
+            <Layer
+              id="campus-buildings-label"
+              type="symbol"
+              layout={{
+                'text-field': ['get', 'name'],
+                'text-size': 11,
+                'text-anchor': 'center',
+                'text-offset': [0, -1.4],
+                'text-allow-overlap': false,
+              }}
+              paint={{
+                'text-color': '#ffffff',
+                'text-halo-color': '#0B3760',
+                'text-halo-width': 1.4,
+              }}
+              minzoom={15.5}
+            />
+          </Source>
+
+          <NavigationControl position="top-right" visualizePitch />
 
           <Marker longitude={block.lng} latitude={block.lat} anchor="bottom">
             <div className="coord-pin dest-pin">
               <div className="coord-pin-title">{block.name}</div>
-              <div className="coord-pin-xy">
-                {fmtCoord(block.lat)}, {fmtCoord(block.lng)}
-              </div>
             </div>
           </Marker>
 
@@ -240,9 +267,6 @@ export default function CampusMap({ userPos, block, onArrived, onCalibratePin })
               </div>
               <div className="you-avatar-label">
                 <strong>You (live)</strong>
-                <span>
-                  {fmtCoord(userPos.lat)}, {fmtCoord(userPos.lng)}
-                </span>
                 {accuracyM != null && <span>±{accuracyM} m</span>}
               </div>
             </div>
@@ -297,7 +321,7 @@ export default function CampusMap({ userPos, block, onArrived, onCalibratePin })
       <div className={`map-3d-badge ${directionUnreliable ? 'map-3d-badge-warn' : ''}`}>
         {directionUnreliable
           ? `GPS weak ±${accuracyM}m — direction unreliable`
-          : `Live GPS · ${dir || ''} · Direct line`}
+          : `3D Campus · Live GPS · ${dir || ''}`}
       </div>
 
       <div className="map-float-actions">
